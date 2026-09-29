@@ -122,7 +122,7 @@ export function noteNameLines(notes, nameOf) {
   return lines;
 }
 
-function guessMelody(tracks, lines) {
+export function guessMelody(tracks, lines) {
   const candidates = tracks.filter((t) => !t.isDrum && t.notes.length);
   if (!candidates.length) return -1;
   const sylTimes = lines.flatMap((l) => l.syllables.map((s) => s.time));

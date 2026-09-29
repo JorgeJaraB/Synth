@@ -21,10 +21,10 @@
     "@fontsource-variable/nunito": "^5.3.0",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@tonejs/midi": "^2.0.28",
-    "midi-file": "^1.2.4",
-    "tone": "^15.1.22",
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
+    "midi-file": "^1.2.4",
+    "tone": "^15.1.22",
     "vite": "^8.3.1"
   },
   "build": {
@@ -66,10 +66,20 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Synth Manos",
       "runAfterFinish": true,
-      "artifactName": "SynthManos-Instalador-${version}.${ext}"
+      "artifactName": "SynthManos-Instalador.${ext}"
     },
     "portable": {
-      "artifactName": "SynthManos-Portable-${version}.${ext}"
-    }
+      "artifactName": "SynthManos-Portable.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "JorgeJaraB",
+        "repo": "Synth"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

@@ -12,7 +12,7 @@ export class AirPiano {
     this.onNoteOff = onNoteOff;
     this.getHints = getHints || (() => new Map());
     this.active = new Map(); // "mano:dedo" → midi
-    this.prevY = new Map();
+    this.extCount = new Map(); // fotogramas seguidos con el dedo extendido (+) o doblado (-)
     this.external = new Map();
     this.fingers = new Set(['index', 'middle', 'ring', 'pinky', 'thumb']);
   }
@@ -39,6 +39,10 @@ export class AirPiano {
     return { x: margin, y: Math.min(y, h - kh - 12), w: w - margin * 2, h: kh };
   }
 
+  /**
+   * Una tecla suena solo mientras un dedo está EXTENDIDO y su punta está sobre ella.
+   * Con la mano cerrada no suena nada; al doblar el dedo, la nota se suelta.
+   */
   update(hands, stage) {
     const r = this.region(stage.w, stage.h);
     this.layout = keyLayout(this.low, this.high, r.x, r.y, r.w, r.h);
@@ -48,29 +52,28 @@ export class AirPiano {
       for (const f of FINGERS) {
         if (!this.fingers.has(f)) continue;
         const id = hand.key + ':' + f;
-        const p = stage.toScreen(hand.landmarks[TIP[f]]);
-        // Con el pulgar solo tocamos si está bien separado (evita notas fantasma).
-        if (f === 'thumb' && !hand.extended.thumb) continue;
         seen.add(id);
-        const prevY = this.prevY.get(id) ?? p.y;
-        this.prevY.set(id, p.y);
+        const p = stage.toScreen(hand.landmarks[TIP[f]]);
+        // Pequeño filtro: el dedo debe llevar 2 fotogramas extendido (o doblado) para cambiar.
+        const ext = hand.extended[f];
+        const c = this.extCount.get(id) || 0;
+        const n = ext ? Math.max(1, c + 1) : Math.min(-1, c - 1);
+        this.extCount.set(id, n);
+        const isExt = n >= 2 || (n > -2 && this.active.has(id));
+        const inside = p.y >= r.y + 4 && p.y <= r.y + r.h + 10;
+        const m = isExt && inside ? keyAt(this.layout, p.x, Math.min(p.y, r.y + r.h - 2)) : null;
         const cur = this.active.get(id);
-        const inside = p.y >= r.y + 4;
-        const m = inside ? keyAt(this.layout, p.x, p.y) : null;
-        this.tips.push({ ...p, id, pressed: cur != null });
-        if (cur == null) {
-          // Solo se pulsa al "bajar" hacia la tecla (no al estar ya dentro quieto).
-          if (m != null && p.y - prevY > -2) this._on(id, m);
-        } else if (!inside || p.y < r.y - 6) {
-          this._off(id);
-        } else if (m != null && m !== cur) {
-          this._off(id);
+        this.tips.push({ ...p, id, pressed: m != null, extended: isExt });
+        if (m == null) {
+          if (cur != null) this._off(id);
+        } else if (m !== cur) {
+          if (cur != null) this._off(id);
           this._on(id, m);
         }
       }
     }
     for (const id of [...this.active.keys()]) if (!seen.has(id)) this._off(id);
-    for (const id of [...this.prevY.keys()]) if (!seen.has(id)) this.prevY.delete(id);
+    for (const id of [...this.extCount.keys()]) if (!seen.has(id)) this.extCount.delete(id);
   }
 
   _on(id, midi) {
@@ -92,6 +95,7 @@ export class AirPiano {
     for (const [m, c] of this.external) pressed.set(m, c);
     drawKeyboard(ctx, this.layout, { pressed, hints: this.getHints(), alpha: 0.88 });
     for (const t of this.tips || []) {
+      if (!t.extended) continue; // los dedos doblados no tocan: no se dibujan
       ctx.beginPath();
       ctx.arc(t.x, t.y, t.pressed ? 13 : 9, 0, Math.PI * 2);
       ctx.fillStyle = t.pressed ? 'rgba(255,170,40,0.95)' : 'rgba(255,255,255,0.85)';

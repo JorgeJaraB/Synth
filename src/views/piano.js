@@ -138,7 +138,7 @@ export function mount(root, params = {}) {
           air.draw(ctx);
         },
       });
-      wrap.append(h('div.hint-card.compact', '🖐️ Siéntate a un brazo de distancia del portátil y baja la punta de los dedos sobre las teclas, como en un piano de verdad. Si no llegas bien, cambia la altura del teclado en Opciones.'));
+      wrap.append(h('div.hint-card.compact', '✊ Pon la mano cerrada sobre el teclado y ☝️ extiende un dedo para tocar la tecla que tiene debajo. Al doblarlo, la nota se para. Si no llegas bien, cambia la altura del teclado en Opciones.'));
       cleanup = () => {
         air.releaseAll();
         stage.destroy();

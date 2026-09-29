@@ -13,4 +13,20 @@ contextBridge.exposeInMainWorld('synthAPI', {
   },
   songsFolder: () => ipcRenderer.invoke('songs:folder'),
   openSongsFolder: () => ipcRenderer.invoke('songs:open'),
+  appVersion: () => ipcRenderer.invoke('app:version'),
+  canSendReport: () => ipcRenderer.invoke('report:can-send'),
+  sendReport: (title, body) => ipcRenderer.invoke('report:send', title, body),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  onUpdate: (fn) => {
+    const listener = (_e, info) => fn(info);
+    ipcRenderer.on('update:status', listener);
+    return () => ipcRenderer.removeListener('update:status', listener);
+  },
+  recStart: (ext) => ipcRenderer.invoke('rec:start', ext),
+  recChunk: (id, bytes) => ipcRenderer.invoke('rec:chunk', id, bytes),
+  recEnd: (id) => ipcRenderer.invoke('rec:end', id),
+  recordingsFolder: () => ipcRenderer.invoke('rec:folder'),
+  openRecordingsFolder: () => ipcRenderer.invoke('rec:open-folder'),
+  showRecording: (file) => ipcRenderer.invoke('rec:show', file),
 });

@@ -3,10 +3,17 @@
 // (Documentos/Synth Manos/Canciones, con subcarpetas como categorías);
 // en el navegador (desarrollo) se usan las canciones de ejemplo.
 import { parseSong } from './midi-parse.js';
+import { parseMusicXmlFile } from './musicxml.js';
+
+/** Lee cualquier formato admitido: MIDI/KAR o MusicXML. */
+export async function parseAny(bytes, fileName) {
+  return SCORE_RE.test(fileName) ? parseMusicXmlFile(bytes, fileName) : parseSong(bytes, fileName);
+}
 
 const api = window.synthAPI || null;
 export const isDesktop = !!api;
-export const SONG_RE = /\.(mid|midi|kar)$/i;
+export const SONG_RE = /\.(mid|midi|kar|musicxml|mxl|xml)$/i;
+export const SCORE_RE = /\.(musicxml|mxl|xml)$/i; // partituras MusicXML (MuseScore…)
 export const EXAMPLES_CATEGORY = 'Ejemplos';
 
 const cache = new Map();
@@ -49,7 +56,7 @@ async function readBytes(name) {
 
 export async function loadSong(name) {
   if (cache.has(name)) return cache.get(name);
-  const song = parseSong(await readBytes(name), name.split('/').pop());
+  const song = await parseAny(await readBytes(name), name.split('/').pop());
   cache.set(name, song);
   return song;
 }
@@ -68,7 +75,7 @@ export async function importFiles(files, category = '') {
     }
     const bytes = new Uint8Array(await f.arrayBuffer());
     try {
-      parseSong(bytes, f.name); // validar antes de copiar
+      await parseAny(bytes, f.name); // validar antes de copiar
     } catch {
       rejected.push(f.name);
       continue;

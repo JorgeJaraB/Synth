@@ -1,5 +1,8 @@
 // Proceso principal de Electron: ventana, archivos locales y carpeta de canciones.
-const { app, BrowserWindow, protocol, ipcMain, shell, session, Menu } = require('electron');
+const { app, BrowserWindow, protocol, ipcMain, shell, session, Menu, desktopCapturer, net } = require('electron');
+
+/** Repositorio de GitHub donde se crean los reportes de problemas. */
+const REPORT_REPO = 'JorgeJaraB/Synth';
 const path = require('node:path');
 const fs = require('node:fs');
 
@@ -21,7 +24,7 @@ const MIME = {
   '.mid': 'audio/midi',
   '.kar': 'audio/midi',
 };
-const SONG_RE = /\.(mid|midi|kar)$/i;
+const SONG_RE = /\.(mid|midi|kar|musicxml|mxl|xml)$/i;
 
 // La detección de manos necesita WebGL. Si la tarjeta gráfica está en la lista
 // negra de Chromium o no hay aceleración, se usa el renderizado por software.
@@ -34,6 +37,29 @@ protocol.registerSchemesAsPrivileged([
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
+}
+
+/**
+ * Quita del texto de un reporte cualquier dato que pueda identificar al equipo o a las personas:
+ * rutas de archivos (p. ej. la de un vídeo grabado), nombre de usuario y nombre del equipo.
+ */
+function scrubPrivate(text) {
+  const os = require('node:os');
+  // Las rutas pueden tener espacios: se borra hasta el final de la línea (mejor de más que de menos).
+  let out = String(text)
+    .replace(/[A-Za-z]:\\[^\n"'<>|]*/g, '<ruta>')
+    .replace(/\\\\[^\n"'<>|]+/g, '<ruta>')
+    .replace(/file:\/\/[^\n"'<>)]+/gi, '<ruta>')
+    .replace(/\/(?:home|Users)\/[^\n"'<>)]*/g, '<ruta>')
+    .replace(/[^\n"'<>]*\.(?:mp4|webm|mkv|mov)\b/gi, '<archivo de vídeo>');
+  for (const secret of [os.userInfo().username, os.hostname()]) {
+    if (secret && secret.length > 2) out = out.split(secret).join('<privado>');
+  }
+  return out;
+}
+
+function recordingsDir() {
+  return path.join(app.getPath('documents'), 'Synth Manos', 'Grabaciones');
 }
 
 function songsDir() {
@@ -184,6 +210,125 @@ function registerIpc() {
   });
   ipcMain.handle('songs:folder', () => ensureSongsDir());
   ipcMain.handle('songs:open', () => shell.openPath(ensureSongsDir()));
+
+  // ---------- Grabaciones de vídeo ----------
+  // Se escriben por trozos mientras se graba (no se acumula todo en memoria).
+  const recordings = new Map();
+  ipcMain.handle('rec:start', async (_e, ext) => {
+    const dir = recordingsDir();
+    await fs.promises.mkdir(dir, { recursive: true });
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}.${pad(d.getMinutes())}.${pad(d.getSeconds())}`;
+    const safeExt = ext === 'mp4' ? 'mp4' : 'webm';
+    const file = path.join(dir, `Synth Manos ${stamp}.${safeExt}`);
+    const id = String(Date.now());
+    recordings.set(id, { file, stream: fs.createWriteStream(file) });
+    return id;
+  });
+  ipcMain.handle('rec:chunk', (_e, id, bytes) => {
+    const r = recordings.get(id);
+    if (!r) return false;
+    return new Promise((resolve) => r.stream.write(Buffer.from(bytes), () => resolve(true)));
+  });
+  ipcMain.handle('rec:end', (_e, id) => {
+    const r = recordings.get(id);
+    if (!r) return null;
+    recordings.delete(id);
+    return new Promise((resolve) => r.stream.end(() => resolve(r.file)));
+  });
+  ipcMain.handle('rec:folder', () => recordingsDir());
+  ipcMain.handle('app:version', () => app.getVersion());
+
+  // ---------- Reportes de problemas sin cuenta de GitHub ----------
+  // El token (solo con permiso para crear incidencias en este repositorio) lo añade GitHub
+  // Actions al compilar, desde el secreto ISSUES_TOKEN. Si no hay, se usa la web de GitHub.
+  const reportToken = (() => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(__dirname, 'report-config.json'), 'utf8')).token || null;
+    } catch {
+      return null;
+    }
+  })();
+  let lastReport = 0;
+  ipcMain.handle('report:can-send', () => !!reportToken);
+  ipcMain.handle('report:send', async (_e, title, body) => {
+    if (!reportToken) return { ok: false, reason: 'no-token' };
+    // Privacidad: solo se envía TEXTO, y se limpia de rutas, usuario y nombre del equipo.
+    if (typeof title !== 'string' || typeof body !== 'string') return { ok: false, reason: 'formato' };
+    title = scrubPrivate(title);
+    body = scrubPrivate(body);
+    if (Date.now() - lastReport < 20000) return { ok: false, reason: 'too-fast' };
+    lastReport = Date.now();
+    try {
+      const api = process.env.SYNTH_REPORT_API || 'https://api.github.com'; // (variable solo para pruebas)
+      const res = await net.fetch(`${api}/repos/${REPORT_REPO}/issues`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${reportToken}`,
+          Accept: 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'SynthManos',
+        },
+        body: JSON.stringify({ title: String(title).slice(0, 200), body: String(body).slice(0, 60000), labels: ['bug'] }),
+      });
+      if (!res.ok) return { ok: false, reason: 'http-' + res.status };
+      const issue = await res.json();
+      return { ok: true, number: issue.number, url: issue.html_url };
+    } catch (e) {
+      return { ok: false, reason: 'offline', message: String(e?.message || e) };
+    }
+  });
+  ipcMain.handle('update:check', async () => {
+    if (!updater) return { status: app.isPackaged ? 'unavailable' : 'dev' };
+    try {
+      await updater.checkForUpdates();
+      return { status: 'checking' };
+    } catch (e) {
+      return { status: 'error', message: String(e?.message || e) };
+    }
+  });
+  ipcMain.handle('update:install', () => {
+    // isSilent = true: se instala sin mostrar el asistente; isForceRunAfter = true: se vuelve a abrir.
+    updater?.quitAndInstall(true, true);
+  });
+  ipcMain.handle('rec:open-folder', async () => {
+    await fs.promises.mkdir(recordingsDir(), { recursive: true });
+    return shell.openPath(recordingsDir());
+  });
+  ipcMain.handle('rec:show', (_e, file) => {
+    // Solo archivos dentro de la carpeta de grabaciones.
+    const full = path.resolve(String(file));
+    if (full.startsWith(recordingsDir() + path.sep)) shell.showItemInFolder(full);
+  });
+}
+
+// ---------- Actualización automática ----------
+// La app instalada mira en las Releases de GitHub si hay una versión nueva, la descarga
+// en segundo plano y la instala al cerrarse (o al pulsar "Reiniciar ahora").
+let updater = null;
+function sendUpdate(status, extra = {}) {
+  win?.webContents.send('update:status', { status, ...extra });
+}
+function setupAutoUpdate() {
+  if (!app.isPackaged || process.env.SYNTH_NO_UPDATE) return;
+  try {
+    ({ autoUpdater: updater } = require('electron-updater'));
+  } catch (e) {
+    console.error('Sin actualizaciones automáticas', e);
+    return;
+  }
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.on('checking-for-update', () => sendUpdate('checking'));
+  updater.on('update-available', (i) => sendUpdate('downloading', { version: i.version }));
+  updater.on('update-not-available', () => sendUpdate('latest'));
+  updater.on('download-progress', (p) => sendUpdate('progress', { percent: Math.round(p.percent) }));
+  updater.on('update-downloaded', (i) => sendUpdate('ready', { version: i.version }));
+  updater.on('error', (e) => sendUpdate('error', { message: String(e?.message || e).slice(0, 200) }));
+  const check = () => updater.checkForUpdates().catch(() => {});
+  setTimeout(check, 5000); // al arrancar (sin retrasar la apertura)
+  setInterval(check, 2 * 60 * 60 * 1000); // y cada 2 horas si se deja abierta
 }
 
 function registerProtocol() {
@@ -256,13 +401,25 @@ app.on('second-instance', () => {
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
-  const allowed = new Set(['media', 'fullscreen', 'clipboard-sanitized-write']);
+  const allowed = new Set(['media', 'fullscreen', 'clipboard-sanitized-write', 'display-capture']);
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(allowed.has(permission)));
+  // Grabación: se captura siempre la propia ventana de la app, sin preguntar qué pantalla.
+  session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
+    try {
+      const sources = await desktopCapturer.getSources({ types: ['window', 'screen'] });
+      const own = win && sources.find((s) => s.id === win.getMediaSourceId());
+      callback({ video: own || sources.find((s) => s.id.startsWith('screen')) || sources[0] });
+    } catch (e) {
+      console.error('No se pudo capturar la ventana', e);
+      callback({});
+    }
+  });
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
   registerProtocol();
   registerIpc();
   createWindow();
   watchSongs();
+  setupAutoUpdate();
 });
 
 app.on('window-all-closed', () => app.quit());

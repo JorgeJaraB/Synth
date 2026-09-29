@@ -4,13 +4,13 @@ import { audio, INSTRUMENTS } from '../core/audio.js';
 import { settings, onSettingsChange } from '../core/settings.js';
 import { noteColor, noteName, SOLFEGE, LETTERS } from '../core/notes.js';
 import {
-  chordNotes, chordSymbol, chordLongName, chordRoot, romanFor, degreeFromFingers, voicingFromFingers,
-  handRoll, tiltSide, qualityFor, NATURAL_QUALITY, PROGRESSIONS, Stabilizer, voicingLabel,
+  chordNotes, chordSymbol, chordLongName, chordRoot, romanFor, qualityFor, NATURAL_QUALITY, PROGRESSIONS, voicingLabel,
 } from '../core/chords.js';
+import { ChordHandReader } from '../core/chord-hands.js';
 import { CameraStage } from '../ui/camera-stage.js';
 import { confetti } from '../ui/transport.js';
 import { h, settingSelect, settingRange, settingToggle, panelToggle, INSTRUMENT_OPTIONS } from '../ui/dom.js';
-import { laneArea, drawWave } from './synth.js';
+import { drawWave } from './synth.js';
 import { ChordTutorial } from './chords-tutorial.js';
 import { handSvg } from '../ui/hand-svg.js';
 
@@ -24,11 +24,9 @@ const hexToRgb = (hex) => {
 
 export function mount(root) {
   let voice = null;
-  const stab = new Stabilizer(140);
+  const reader = new ChordHandReader();
   let current = null; // { degree, quality, voicing }
-  let tilt = 'recta';
   let volume = 0;
-  let brightness = 0.6;
   let exprMuted = false;
   let progStep = 0;
   let progHeldSince = 0;
@@ -147,7 +145,7 @@ export function mount(root) {
   // La primera vez se ofrece el tutorial; después, la tarjeta de ayuda breve.
   if (!settings.chordTutorialDone) startTutorial(true);
   else stageWrap.append(hint);
-  if (import.meta.env.DEV) window.__chords = { get tutorial() { return tutorial; }, get current() { return current; }, get voice() { return voice; }, get volume() { return volume; }, get progStep() { return progStep; } };
+  if (import.meta.env.DEV) window.__chords = { reader, get tutorial() { return tutorial; }, get current() { return current; }, get voice() { return voice; }, get volume() { return volume; }, get progStep() { return progStep; } };
 
   function rebuildVoice() {
     voice?.dispose();
@@ -176,76 +174,32 @@ export function mount(root) {
     legendRows.forEach((r, i) => r.classList.toggle('active', !!state && state.degree === i + 1));
   }
 
-  /** Reparte las manos: la de los acordes y la de expresión. */
-  function assignHands(hands) {
-    let chord = null;
-    let expr = null;
-    const chordOnLeft = !settings.chordLefty;
-    if (hands.length >= 2) {
-      const sorted = [...hands].sort((a, b) => a.landmarks[0].x - b.landmarks[0].x);
-      [chord, expr] = chordOnLeft ? [sorted[0], sorted[sorted.length - 1]] : [sorted[sorted.length - 1], sorted[0]];
-    } else if (hands.length === 1) {
-      const onLeft = hands[0].landmarks[0].x < 0.5;
-      if (onLeft === chordOnLeft) chord = hands[0];
-      else expr = hands[0];
-    }
-    return { chord, expr };
-  }
-
   const stage = new CameraStage(stageWrap, {
     dim: 0.4,
     onDraw(ctx, w, hh, hands, st) {
       const now = performance.now();
-      const { chord, expr } = assignHands(hands);
-      const area = laneArea(hh);
-
-      // Mano de los acordes → grado + mayor/menor
-      let raw = null;
-      chordHandInfo = null;
-      if (chord) {
-        const degree = degreeFromFingers(chord.extended);
-        const onLeft = chord.landmarks[0].x < 0.5;
-        tilt = tiltSide(handRoll(chord.landmarks), onLeft, tilt);
-        if (degree >= 1 && degree <= 7) raw = { degree, quality: qualityFor(degree, tilt) };
-        chordHandInfo = { pos: st.toScreen(chord.landmarks[0]), degree, tilt, onLeft };
-      }
-
-      // Mano de expresión → variante, volumen y brillo
-      exprHandInfo = null;
-      let voicing = 'triada';
-      if (expr) {
-        const vc = voicingFromFingers(expr.extended);
-        exprMuted = vc == null && expr.fist;
-        voicing = vc || 'triada';
-        const y = st.toScreen(expr.landmarks[0]).y;
-        const t = Math.max(0, Math.min(1, (area.bottom + hh * 0.12 - y) / (area.bottom + hh * 0.12 - area.top)));
-        volume = exprMuted ? 0 : 0.15 + t * 0.85;
-        brightness = Math.max(0, Math.min(1, 0.55 + handRoll(expr.landmarks) / 80));
-        exprHandInfo = { pos: st.toScreen(expr.landmarks[0]), voicing, muted: exprMuted };
-      } else {
-        exprMuted = false;
-        volume = 0.7;
-        brightness = 0.6;
-      }
-      if (raw) raw.voicing = voicing;
-
-      const stable = stab.update(raw, now);
+      const r = reader.update(hands, st, hh, now);
+      const stable = r.stable;
+      volume = r.volume;
+      exprMuted = r.exprMuted;
+      chordHandInfo = r.chordInfo;
+      exprHandInfo = r.exprInfo;
       applyChord(stable);
       tutorial?.update({
-        chordPresent: !!chord,
-        degree: chordHandInfo?.degree ?? -1,
-        tilt,
-        exprPresent: !!expr,
-        voicing: expr ? voicingFromFingers(expr.extended) : null,
+        chordPresent: !!r.chord,
+        degree: r.degree,
+        tilt: r.tilt,
+        exprPresent: !!r.expr,
+        voicing: r.voicing,
         exprMuted,
         volume,
-        brightness,
+        brightness: r.brightness,
         stable,
       });
       const v = ensureVoice();
       if (v) {
         v.setVolume(stable ? volume : 0);
-        v.setBrightness(brightness);
+        v.setBrightness(r.brightness);
         v.tick();
       }
 

@@ -68,18 +68,40 @@ export async function listCameras() {
   }
 }
 
-/** Analiza una mano: dedos extendidos, pinza, puño... */
-export function analyzeHand(lm) {
+const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+
+/**
+ * ¿Está el pulgar fuera? Se mide en 3D (coordenadas "world" de MediaPipe, en metros),
+ * que no dependen de cómo se vea la mano en la imagen. Calibrado con fotos reales:
+ *   pulgar fuera  → punta/nudillo corazón ≥ 0,79 · punta/meñique ≥ 1,12
+ *   pulgar doblado → ≤ 0,52 · ≤ 0,75
+ * Con histéresis (prev) para que no parpadee en la frontera.
+ */
+export function thumbOut(world, prev = false) {
+  const size = dist3(world[0], world[9]) || 0.08;
+  const toMiddle = dist3(world[4], world[9]) / size;
+  const toPinky = dist3(world[4], world[17]) / (dist3(world[3], world[17]) || 0.05);
+  return prev ? toMiddle > 0.58 && toPinky > 0.88 : toMiddle > 0.66 && toPinky > 0.98;
+}
+
+/**
+ * Analiza una mano: dedos extendidos, pinza, puño...
+ * @param lm     puntos en la imagen (0..1)
+ * @param world  puntos 3D en metros (opcional pero mucho más fiable)
+ * @param prevThumb  estado anterior del pulgar (histéresis)
+ */
+export function analyzeHand(lm, world = null, prevThumb = false) {
   const wrist = lm[0];
   const size = dist(wrist, lm[9]) || 0.1; // muñeca → nudillo del dedo corazón
+  const P = world || lm;
+  const d = world ? dist3 : dist;
   const extended = {};
   for (const f of ['index', 'middle', 'ring', 'pinky']) {
-    extended[f] = dist(wrist, lm[TIP[f]]) > dist(wrist, lm[PIP[f]]) * 1.12;
+    extended[f] = d(P[0], P[TIP[f]]) > d(P[0], P[PIP[f]]) * 1.12;
   }
-  // Pulgar fuera: la punta se aleja de la palma y además está separada del índice
-  // (si está pegado al lado del índice no cuenta; importante para contar dedos).
-  extended.thumb =
-    dist(lm[TIP.thumb], lm[17]) > dist(lm[PIP.thumb], lm[17]) * 1.05 && dist(lm[TIP.thumb], lm[5]) / size > 0.5;
+  extended.thumb = world
+    ? thumbOut(world, prevThumb)
+    : dist(lm[TIP.thumb], lm[17]) > dist(lm[PIP.thumb], lm[17]) * 1.2 && dist(lm[TIP.thumb], lm[9]) / size > 0.66;
   const pinchDist = dist(lm[TIP.thumb], lm[TIP.index]) / size;
   const nExt = ['index', 'middle', 'ring', 'pinky'].filter((f) => extended[f]).length;
   return {
@@ -105,6 +127,7 @@ export class HandTracker {
     this._smooth = new Map();
     this._errors = 0;
     this._recovering = false;
+    this._thumb = new Map();
   }
 
   onFrame(fn) {
@@ -116,8 +139,10 @@ export class HandTracker {
     if (this.running) return;
     const constraints = {
       video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
+        // 960×540 basta para detectar bien las manos y deja más imágenes por segundo
+        // en portátiles modestos (reacción más rápida).
+        width: { ideal: 960 },
+        height: { ideal: 540 },
         frameRate: { ideal: 30 },
         ...(settings.cameraId ? { deviceId: { exact: settings.cameraId } } : { facingMode: 'user' }),
       },
@@ -200,9 +225,13 @@ export class HandTracker {
       const a = 0.55;
       const sm = prev ? lm.map((p, j) => ({ x: prev[j].x + (p.x - prev[j].x) * a, y: prev[j].y + (p.y - prev[j].y) * a, z: p.z })) : lm;
       this._smooth.set(key, sm);
-      out.push({ key, side: key.startsWith('Left') ? 'izquierda' : 'derecha', landmarks: sm, ...analyzeHand(sm) });
+      const world = res.worldLandmarks?.[i] || null;
+      const info = analyzeHand(sm, world, this._thumb.get(key));
+      this._thumb.set(key, info.extended.thumb);
+      out.push({ key, side: key.startsWith('Left') ? 'izquierda' : 'derecha', landmarks: sm, world, ...info });
     });
     for (const k of [...this._smooth.keys()]) if (!seen.has(k)) this._smooth.delete(k);
+    for (const k of [...this._thumb.keys()]) if (!seen.has(k)) this._thumb.delete(k);
     out.sort((a, b) => a.landmarks[0].x - b.landmarks[0].x);
     return out;
   }

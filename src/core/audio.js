@@ -3,6 +3,9 @@ import * as Tone from 'tone';
 import { settings, onSettingsChange } from './settings.js';
 import { toneName, midiToFreq } from './notes.js';
 
+/** Ganancia extra tras el compresor (dB). Ajustada midiendo: acorde ≈ -14 dB RMS. */
+const MAKEUP_DB = 4;
+
 const PIANO_SAMPLES = {};
 for (let o = 1; o <= 7; o++) {
   PIANO_SAMPLES['C' + o] = `C${o}.mp3`;
@@ -80,8 +83,12 @@ class AudioEngine {
     this.delay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.3, wet: settings.delay });
     this.analyser = new Tone.Waveform(1024);
     this.meter = new Tone.Meter({ smoothing: 0.8 });
-    this.bus = new Tone.Gain(0.8);
-    this.bus.chain(this.delay, this.reverb, this.master, this.limiter, Tone.getDestination());
+    this.bus = new Tone.Gain(1);
+    // Compresor + ganancia de compensación: sube el volumen percibido (sobre todo de los
+    // acordes, que antes apenas se oían) sin saturar; el limitador evita picos.
+    this.compressor = new Tone.Compressor({ threshold: -22, ratio: 3.5, attack: 0.005, release: 0.25, knee: 8 });
+    this.makeup = new Tone.Gain(Tone.dbToGain(MAKEUP_DB));
+    this.bus.chain(this.delay, this.reverb, this.compressor, this.makeup, this.master, this.limiter, Tone.getDestination());
     this.limiter.connect(this.analyser);
     this.limiter.connect(this.meter);
 
@@ -106,20 +113,13 @@ class AudioEngine {
     this.loadPiano();
   }
 
+  /** Precarga los pianos (principal y acompañamiento) para que la primera nota ya suene. */
   loadPiano() {
     if (this.pianoPromise) return this.pianoPromise;
-    this.pianoPromise = new Promise((resolve) => {
-      const s = new Tone.Sampler({
-        urls: PIANO_SAMPLES,
-        baseUrl: './samples/piano/',
-        release: 1.2,
-        onload: () => {
-          this.pianoLoaded = true;
-          resolve(s);
-        },
-        onerror: () => resolve(s),
-      });
-      this._pianoSampler = s;
+    this.getPoly('piano', 'main');
+    this.getPoly('piano', 'acc');
+    this.pianoPromise = Tone.loaded().then(() => {
+      this.pianoLoaded = true;
     });
     return this.pianoPromise;
   }
@@ -134,7 +134,7 @@ class AudioEngine {
       // Un Sampler por destino (principal / acompañamiento).
       const s = new Tone.Sampler({ urls: PIANO_SAMPLES, baseUrl: './samples/piano/', release: 1.2 });
       s.connect(dest);
-      s.volume.value = -4;
+      s.volume.value = 3;
       return s;
     }
     const filter = new Tone.Filter(def.filter, 'lowpass', -12).connect(dest);
@@ -150,7 +150,7 @@ class AudioEngine {
       synth = new Tone.PolySynth(Tone.Synth, { oscillator: def.osc, envelope: def.env });
     }
     synth.maxPolyphony = 32;
-    synth.volume.value = -10;
+    synth.volume.value = -5;
     if (def.vibrato) {
       const vib = new Tone.Vibrato(5, 0.08);
       synth.chain(vib, filter);
@@ -223,6 +223,35 @@ class AudioEngine {
     return new ContinuousVoice(this, instrument);
   }
 
+  /**
+   * Flujo de audio para grabar: todo lo que suena en la app y, opcionalmente, el micrófono.
+   * @param {MediaStream|null} mic
+   */
+  startRecordingAudio(mic = null) {
+    const ctx = Tone.getContext();
+    this.recDest = ctx.createMediaStreamDestination();
+    Tone.connect(this.limiter, this.recDest);
+    if (mic) {
+      this.recMic = ctx.createMediaStreamSource(mic);
+      this.recMicGain = ctx.createGain();
+      this.recMicGain.gain.value = 1.2;
+      this.recMic.connect(this.recMicGain);
+      this.recMicGain.connect(this.recDest);
+    }
+    return this.recDest.stream;
+  }
+
+  stopRecordingAudio() {
+    try {
+      Tone.disconnect(this.limiter, this.recDest);
+    } catch {
+      /* ya desconectado */
+    }
+    this.recMic?.disconnect();
+    this.recMicGain?.disconnect();
+    this.recDest = this.recMic = this.recMicGain = null;
+  }
+
   /** Voz de acordes para el modo "Acordes con gestos". */
   createChordVoice(instrument = 'suave') {
     return new ChordVoice(this, instrument);
@@ -258,7 +287,7 @@ class ContinuousVoice {
     // Un vibrato ligero da vida al sonido cuando la mano está quieta.
     this.vibrato = new Tone.Vibrato(5.5, this.def.vibrato ? 0.1 : 0.03);
     this.osc.chain(this.vibrato, this.filter);
-    this.osc.volume.value = -8;
+    this.osc.volume.value = -4;
     this.osc.start();
     this.gainTarget = 0.7;
   }
@@ -366,7 +395,7 @@ class ChordVoice {
     const drop = this.notes.filter((m) => !next.includes(m));
     const add = next.filter((m) => !this.notes.includes(m));
     if (drop.length) this.synth.triggerRelease(this._names(drop), '+0.005');
-    if (add.length) this.synth.triggerAttack(this._names(add), '+0.01', 0.55);
+    if (add.length) this.synth.triggerAttack(this._names(add), '+0.01', 0.75);
     this.notes = next;
   }
 
@@ -398,7 +427,7 @@ class ChordVoice {
   }
 
   setVolume(v) {
-    this.out.gain.rampTo(Math.max(0, Math.min(1, v)) * 0.9, 0.08);
+    this.out.gain.rampTo(Math.max(0, Math.min(1, v)), 0.12);
   }
 
   setBrightness(b) {
@@ -406,6 +435,7 @@ class ChordVoice {
   }
 
   silence() {
+    if (!this.notes.length) return;
     this.synth.releaseAll?.();
     this.notes = [];
   }

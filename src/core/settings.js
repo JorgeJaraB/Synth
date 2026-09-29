@@ -5,7 +5,7 @@ const KEY = 'synth-manos-ajustes-v1';
 export const DEFAULTS = {
   notation: 'solfeo', // 'solfeo' | 'letras' | 'colores'
   theme: 'oscuro', // 'oscuro' | 'claro'
-  masterVolume: 0.8,
+  masterVolume: 1,
   // Sintetizador con cámara
   synthInstrument: 'suave',
   synthScale: 'pentatonica',
@@ -21,6 +21,7 @@ export const DEFAULTS = {
   mirror: true,
   showSkeleton: true,
   cameraId: '',
+  recordMic: false, // grabar también el micrófono (para el karaoke)
   // Acordes con gestos
   chordKey: 0, // tonalidad: 0 = Do, 2 = Re, 7 = Sol...
   chordInstrument: 'suave',
@@ -48,6 +49,11 @@ let state = { ...DEFAULTS };
 try {
   const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
   state = { ...DEFAULTS, ...saved };
+  // v2: el volumen por defecto pasó de 0,8 a 1 (antes se oía demasiado bajo).
+  if (!saved._v) {
+    if (saved.masterVolume === 0.8) state.masterVolume = 1;
+    state._v = 2;
+  }
 } catch {
   /* sin almacenamiento: usamos los valores por defecto */
 }

@@ -12,8 +12,44 @@ export class LyricsView {
     this.lineIndex = -1;
   }
 
+  /**
+   * Acordes para mostrar encima de la letra (como en un cancionero).
+   * @param chords  [{ time, ... }]
+   * @param label   (acorde) => { text, color }
+   */
+  setChords(chords, label) {
+    this.chords = chords;
+    this.chordLabel = label;
+    this.lineIndex = -1; // forzar redibujado
+  }
+
+  /** Acorde que empieza en esta sílaba (o el que suena al empezar la línea). */
+  _chordFor(line, i) {
+    if (!this.chords?.length) return null;
+    const s = line.syllables[i];
+    const from = i === 0 ? -Infinity : s.time - 0.15;
+    const to = (line.syllables[i + 1]?.time ?? line.end) - 0.15;
+    let c = this.chords.find((ch) => ch.time >= from && ch.time < to && (i > 0 || ch.time >= s.time - 0.15));
+    if (!c && i === 0) c = [...this.chords].reverse().find((ch) => ch.time <= s.time + 0.05);
+    return c || null;
+  }
+
   _renderLine(target, line) {
-    target.replaceChildren(...(line ? line.syllables.map((s) => h('span.syl', { style: s.midi != null ? { '--c': noteColor(s.midi) } : {} }, s.text)) : []));
+    target.replaceChildren(
+      ...(line
+        ? line.syllables.map((s, i) => {
+            const el = h('span.syl', { style: s.midi != null ? { '--c': noteColor(s.midi) } : {} }, s.text);
+            const c = this._chordFor(line, i);
+            if (c) {
+              const { text, color } = this.chordLabel(c);
+              el.dataset.chord = text;
+              el.style.setProperty('--chord', color);
+              el.classList.add('has-chord');
+            }
+            return el;
+          })
+        : []),
+    );
   }
 
   update(state, time) {

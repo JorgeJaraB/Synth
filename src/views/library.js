@@ -21,11 +21,12 @@ export function howToAddCard(folderPath, onClose) {
     onClose ? h('button.btn.icon.howto-close', { title: 'Cerrar', onclick: onClose }, '✕') : null,
     h('h3', '➕ Cómo añadir canciones'),
     h('ol',
-      h('li', h('b', 'Arrastra'), ' los archivos .mid o .kar a esta ventana. Es lo más fácil.'),
+      h('li', h('b', 'Arrastra'), ' los archivos a esta ventana. Es lo más fácil.'),
       h('li', 'O pulsa ', h('b', '➕ Añadir canciones'), ' y elígelos en el ordenador.'),
       isDesktop ? h('li', 'O cópialos en la carpeta de canciones (botón ', h('b', '📂 Abrir carpeta'), '). Aparecen aquí solos.') : null,
     ),
-    h('p.muted', '💡 Los archivos ', h('b', '.kar'), ' llevan la letra y sirven para el karaoke. Para encontrarlos, busca en internet el nombre de la canción seguido de "midi" o "kar".'),
+    h('li', 'O pulsa ', h('b', '✏️ Crear canción'), ' y escribe las notas y la letra tú mismo.'),
+    h('p.muted', '💡 Formatos: ', h('b', 'MIDI (.mid)'), ', ', h('b', 'karaoke (.kar)'), ' y ', h('b', 'partituras MusicXML (.musicxml, .mxl)'), '. En ', h('b', 'musescore.com'), ' hay miles de canciones: en cada partitura, "Descargar" → MusicXML o MIDI. También en bitmidi.com o freemidi.org.'),
     isDesktop ? h('p.muted', '📁 Para ordenarlas, crea carpetas dentro de la carpeta de canciones ("Navidad", "3º Primaria"…). Cada carpeta aparece como una categoría.') : null,
     folderPath ? h('p.muted', 'Carpeta: ', h('code', folderPath)) : null,
   );
@@ -43,7 +44,7 @@ export function mount(root, params = {}) {
   const helpHost = h('div');
   const detail = h('aside.panel.song-detail', h('div.empty-detail', h('div.big-emoji', '🎵'), h('p', 'Elige una canción de la lista')));
   const fileInput = h('input', {
-    type: 'file', accept: '.mid,.midi,.kar', multiple: true, style: { display: 'none' },
+    type: 'file', accept: '.mid,.midi,.kar,.musicxml,.mxl,.xml', multiple: true, style: { display: 'none' },
     onchange: async () => { await addFiles(fileInput.files); fileInput.value = ''; },
   });
   const search = h('input.search', {
@@ -58,6 +59,7 @@ export function mount(root, params = {}) {
         h('h2', '📚 Canciones'),
         search,
         h('div.spacer'),
+        h('button.btn', { onclick: () => navigate('song-editor') }, '✏️ Crear canción'),
         h('button.btn.primary', { onclick: () => fileInput.click() }, '➕ Añadir canciones'),
         isDesktop ? h('button.btn', { onclick: () => openSongsFolder() }, '📂 Abrir carpeta') : null,
         h('button.btn.icon', { title: 'Cómo añadir canciones', onclick: () => { showHelp = !showHelp; renderHelp(); } }, '❓'),
@@ -83,7 +85,7 @@ export function mount(root, params = {}) {
     const target = category === ALL || category === EXAMPLES_CATEGORY ? '' : category;
     const { added, rejected } = await importFiles([...files], target);
     if (added.length) toast(`✅ ${added.length === 1 ? 'Canción añadida' : added.length + ' canciones añadidas'}`);
-    if (rejected.length) toast(`⚠️ No se pudo añadir: ${rejected.join(', ')} (solo .mid o .kar)`, 4000);
+    if (rejected.length) toast(`⚠️ No se pudo añadir: ${rejected.join(', ')} (solo .mid, .kar, .musicxml o .mxl)`, 4000);
     await refresh();
     if (added[0]) select(added[0]);
   }
@@ -112,17 +114,18 @@ export function mount(root, params = {}) {
 
   function songCard(s, i) {
     const kar = /\.kar$/i.test(s.name);
+    const score = /\.(musicxml|mxl|xml)$/i.test(s.name);
     return h('button.song-card', { 'data-name': s.name, style: { '--hue': (i * 47) % 360 }, class: s.name === lastSelected ? 'selected' : '', onclick: () => select(s.name) },
-      h('div.song-icon', kar ? '🎤' : '🎼'),
+      h('div.song-icon', score ? '📄' : kar ? '🎤' : '🎼'),
       h('div.song-name', displayName(s.name)),
-      h('div.song-type', kar ? 'Con letra' : 'Sin letra'),
+      h('div.song-type', score ? 'Partitura' : kar ? 'Con letra' : 'MIDI'),
     );
   }
 
   function renderList() {
     let visible = songs.filter((s) => (category === ALL || s.category === category) && (!query || displayName(s.name).toLowerCase().includes(query)));
     if (!songs.length) {
-      list.replaceChildren(h('div.empty-state', h('div.big-emoji', '🎼'), h('h3', 'Todavía no hay canciones'), h('p', 'Arrastra aquí archivos MIDI (.mid) o karaoke (.kar).')));
+      list.replaceChildren(h('div.empty-state', h('div.big-emoji', '🎼'), h('h3', 'Todavía no hay canciones'), h('p', 'Arrastra aquí archivos MIDI, karaoke o partituras MusicXML, o crea una canción con ✏️.')));
       return;
     }
     if (!visible.length) {
@@ -196,6 +199,7 @@ export function mount(root, params = {}) {
         h('button.mode-btn', { onclick: () => go('tutorial-piano') }, h('span.mode-emoji', '🎹'), h('b', 'Tutorial de piano'), h('small', 'Las notas caen sobre el teclado')),
         h('button.mode-btn', { onclick: () => go('tutorial-synth') }, h('span.mode-emoji', '🖐️'), h('b', 'Tutorial con las manos'), h('small', 'La cámara te dice dónde poner la mano')),
         h('button.mode-btn', { onclick: () => go('karaoke') }, h('span.mode-emoji', '🎤'), h('b', 'Karaoke'), h('small', song.hasLyrics ? 'Letra grande con bolita' : 'Sin letra: se cantan los nombres de las notas')),
+        h('button.mode-btn', { onclick: () => go('karaoke-chords') }, h('span.mode-emoji', '🤟'), h('b', 'Karaoke de acordes'), h('small', 'Pon los acordes con las manos mientras suena la canción')),
       ),
       playable.length > 1
         ? h('details.advanced',

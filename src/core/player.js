@@ -21,6 +21,7 @@ export class SongPlayer {
     this.practice = (opts.practice || song.tracks[this.practiceTrack]?.notes || []).map((n, i) => ({ ...n, id: i, state: null }));
     this.mode = opts.mode || 'escuchar';
     this.instrument = opts.instrument || settings.pianoInstrument;
+    this.muted = new Set(opts.muted || []);
     this.speed = settings.tutorialSpeed;
     this.time = opts.startAt ?? -1.5; // pequeña cuenta atrás antes de empezar
     this.playing = false;
@@ -186,7 +187,9 @@ export class SongPlayer {
 
     this.song.tracks.forEach((tr, ti) => {
       const isPractice = ti === this.practiceTrack;
-      const audible = isPractice ? this.mode === 'escuchar' : settings.accompaniment;
+      let audible = isPractice ? this.mode === 'escuchar' : settings.accompaniment;
+      // Pistas silenciadas mientras el alumno las toca él (p. ej. los acordes en el karaoke de acordes).
+      if (this.muted.has(ti) && this.mode !== 'escuchar') audible = false;
       const notes = tr.notes;
       let i = this.ptr[ti];
       while (i < notes.length && notes[i].time < until) {

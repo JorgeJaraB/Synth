@@ -1392,3 +1392,356 @@ body.clase .lyric-line.current {
 body.clase .tut-card {
   display: block;
 }
+
+/* Acordes encima de la letra (karaoke de acordes) */
+.syl.has-chord {
+  position: relative;
+}
+.syl.has-chord::before {
+  content: attr(data-chord);
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  margin-bottom: 0.05em;
+  font-size: 0.5em;
+  font-weight: 900;
+  color: var(--chord, #ffd23f);
+  -webkit-text-fill-color: var(--chord, #ffd23f);
+  background: none;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+.lyrics.with-chords .lyric-line.current {
+  padding-top: 1.1em;
+}
+.lyrics.with-chords .lyric-line.next {
+  margin-top: 0.9em;
+}
+
+/* ---------- Karaoke de acordes ---------- */
+.key-badge {
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+.kc-now {
+  position: absolute;
+  left: 14px;
+  top: 90px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(10, 11, 25, 0.72);
+  backdrop-filter: blur(6px);
+  border-radius: 16px;
+  padding: 10px 12px;
+  color: #fff;
+  min-width: 170px;
+  pointer-events: none;
+}
+.kc-now small {
+  color: #c7cae6;
+  font-weight: 800;
+}
+.kc-chord {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-left: 5px solid var(--c);
+  padding-left: 8px;
+}
+.kc-chord div:last-child {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+.kc-chord b {
+  font-size: 1.1rem;
+}
+.kc-chord.big b {
+  font-size: 1.8rem;
+}
+.kc-chord.big span {
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+.kc-lyrics {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 8px;
+  z-index: 4;
+  color: #fff;
+  --text: #fff;
+  --muted: rgba(255, 255, 255, 0.75);
+  pointer-events: none;
+}
+.kc-lyrics .lyrics {
+  background: linear-gradient(0deg, rgba(10, 11, 25, 0.8), rgba(10, 11, 25, 0));
+  padding-bottom: 12px;
+}
+.kc-lyrics .lyric-line.current {
+  font-size: clamp(1.8rem, 3.4vw, 2.8rem);
+}
+.kc-lyrics .syl {
+  background: linear-gradient(90deg, #ffd23f var(--p), #fff var(--p));
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
+/* ---------- Grabación ---------- */
+.rec-btn.on {
+  background: #d62839;
+  color: #fff;
+  border-color: transparent;
+  animation: recblink 1.2s infinite;
+}
+@keyframes recblink {
+  50% {
+    box-shadow: 0 0 0 6px rgba(214, 40, 57, 0.25);
+  }
+}
+.rec-float {
+  display: none;
+}
+body.recording.clase .rec-float {
+  display: block;
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 60;
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 12px;
+  background: rgba(214, 40, 57, 0.85);
+  color: #fff;
+  font-weight: 900;
+  cursor: pointer;
+}
+.rec-countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  font-size: 12rem;
+  font-weight: 900;
+  color: #fff;
+  background: rgba(10, 11, 25, 0.55);
+  text-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+.rec-countdown.pop {
+  animation: pop 0.5s ease-out;
+}
+.toast.with-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+}
+
+/* ---------- Reportar un problema ---------- */
+.report-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 9, 20, 0.7);
+  backdrop-filter: blur(4px);
+}
+.report-card {
+  width: min(560px, calc(100% - 32px));
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow);
+}
+.report-title,
+.report-desc {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+  color: var(--text);
+  user-select: text;
+  resize: vertical;
+}
+.report-actions {
+  justify-content: flex-end;
+}
+
+/* Actualización disponible */
+.update-btn {
+  display: none;
+  background: #06d6a0;
+  color: #06251c;
+  border-color: transparent;
+}
+.update-btn.show {
+  display: inline-block;
+  animation: pop 0.4s ease-out;
+}
+
+.report-status {
+  margin: 0;
+  min-height: 1.2em;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.privacy-list {
+  margin: 0;
+  padding-left: 4px;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+/* ---------- Crear canción ---------- */
+.editor-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(300px, 1.1fr);
+  gap: 18px;
+  padding: 16px;
+  overflow: auto;
+}
+.editor-form,
+.editor-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.editor-input,
+.editor-ta {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text);
+  user-select: text;
+}
+.editor-ta {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 1rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+.editor-input:focus,
+.editor-ta:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.editor-help summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+.editor-help table {
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.editor-help td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.editor-side {
+  background: var(--bg-2);
+  border-radius: 16px;
+  padding: 14px;
+}
+.editor-side h3 {
+  margin: 0;
+}
+.editor-messages p {
+  margin: 0 0 4px;
+  font-weight: 700;
+}
+.msg-error {
+  color: var(--danger);
+}
+.msg-warn {
+  color: var(--accent);
+}
+.msg-ok {
+  color: var(--good);
+}
+.editor-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ed-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ed-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: calc(34px * var(--w, 1));
+  max-width: 120px;
+  padding: 4px 4px 3px;
+  border-radius: 8px;
+  background: var(--c, var(--surface));
+  color: #fff;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.ed-note b {
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+.ed-note small {
+  font-weight: 800;
+  font-size: 0.8rem;
+  min-height: 1.1em;
+  white-space: pre;
+}
+.ed-note.rest {
+  background: var(--surface);
+  color: var(--muted);
+}
+.ed-note.playing {
+  transform: translateY(-4px) scale(1.08);
+  box-shadow: 0 0 0 3px #fff;
+}
+@media (max-width: 900px) {
+  .editor-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Barra superior compacta en pantallas medianas (portátiles) */
+@media (max-width: 1400px) {
+  .brand-name {
+    display: none;
+  }
+  .topbar {
+    gap: 10px;
+  }
+  .nav-btn {
+    padding: 10px 11px;
+  }
+  .volume input {
+    width: 64px;
+  }
+}
+@media (max-width: 1180px) {
+  .nav-label {
+    display: none;
+  }
+}

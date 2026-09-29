@@ -24,8 +24,8 @@ call npm run dist:win
 if errorlevel 1 goto error
 echo.
 echo  LISTO. Se abre la carpeta "release" con:
-echo    - SynthManos-Instalador-1.0.0.exe  (para el profe)
-echo    - SynthManos-Portable-1.0.0.exe    (sin instalar)
+echo    - SynthManos-Instalador.exe  (para el profe)
+echo    - SynthManos-Portable.exe    (sin instalar)
 start "" "%~dp0release"
 pause
 exit /b 0
