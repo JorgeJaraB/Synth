@@ -13,7 +13,7 @@ import { CameraStage } from '../ui/camera-stage.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { handSvg } from '../ui/hand-svg.js';
 import { h } from '../ui/dom.js';
-import { Transport, speedSelect, toggleButton, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
+import { Transport, speedSelect, toggleButton, accompanimentControl, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
 const NOW_X = 0.24;
@@ -41,10 +41,15 @@ export function mount(root, params) {
   let voice = null;
   let lyrics = null;
   const reader = new ChordHandReader();
+  let harmonyTracks = []; // pistas que se callan para que los acordes los ponga el alumno
 
   const score = scoreBox();
   const transport = new Transport(() => player, {
-    extras: [speedSelect(() => player), toggleButton('🎼 Acompañamiento', 'accompaniment')],
+    extras: [
+      speedSelect(() => player),
+      accompanimentControl(),
+      toggleButton('🎹 Piano de la canción', 'kcOriginalBacking', (on) => player && (player.muted = new Set(on ? [] : harmonyTracks))),
+    ],
   });
   const titleEl = h('h2.song-title', 'Cargando…');
   const keyEl = h('span.key-badge');
@@ -204,8 +209,10 @@ export function mount(root, params) {
     chords = res.chords;
     // Los acordes se guardan como "notas" cuyo valor es el grado (1..7) para reutilizar el reproductor.
     const practice = chords.map((c) => ({ midi: c.degree, time: c.time, duration: c.duration, velocity: 0.8 }));
-    const muted = song.tracks.filter((t) => !t.isDrum && t.index !== melodyTrack).map((t) => t.index);
-    player = new SongPlayer(song, { practiceTrack: -1, practice, mode, muted });
+    // Por defecto se callan las pistas de acompañamiento (los acordes los pone el alumno);
+    // con "Piano de la canción" suenan también, para canciones donde importa más la melodía.
+    harmonyTracks = song.tracks.filter((t) => !t.isDrum && t.index !== melodyTrack).map((t) => t.index);
+    player = new SongPlayer(song, { practiceTrack: -1, practice, mode, muted: settings.kcOriginalBacking ? [] : harmonyTracks });
     if (import.meta.env.DEV) window.__kc = { player, chords, get reader() { return reader; }, get voice() { return voice; } };
     player.on('end', () => {
       voice?.silence();

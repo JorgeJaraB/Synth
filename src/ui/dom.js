@@ -109,3 +109,9 @@ export function panelToggle(panel, label = '⚙️ Opciones') {
   panel.prepend(h('button.btn.icon.panel-close', { title: 'Cerrar', onclick: () => panel.classList.remove('open') }, '✕'));
   return btn;
 }
+
+/** ¿El usuario está escribiendo en un campo de texto? (los atajos de teclado no deben saltar). */
+export function isTyping() {
+  const el = document.activeElement;
+  return !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable);
+}

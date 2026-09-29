@@ -1,7 +1,7 @@
 // Teclado de piano dibujado en canvas: geometría, dibujo y control táctil multitoque.
 import { isBlack, noteColor, noteName } from '../core/notes.js';
 import { settings } from '../core/settings.js';
-import { fitCanvas } from './dom.js';
+import { fitCanvas, isTyping } from './dom.js';
 
 /** Calcula la posición de cada tecla. */
 export function keyLayout(low, high, x, y, width, height) {
@@ -206,7 +206,7 @@ export class TouchKeyboard {
 
   keyDown(e) {
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+    if (isTyping()) return;
     const k = e.key.toLowerCase();
     if (k === 'z') this.keyboardBase = Math.max(24, this.keyboardBase - 12);
     if (k === 'x') this.keyboardBase = Math.min(96, this.keyboardBase + 12);

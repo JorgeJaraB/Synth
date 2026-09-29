@@ -82,7 +82,7 @@ export function mount(root) {
       h('section.card',
         h('h2', '🔊 Sonido'),
         settingRange('Volumen general', 'masterVolume'),
-        settingRange('Volumen del acompañamiento', 'accompanimentVolume'),
+        settingRange('Volumen del acompañamiento', 'accompanimentVolume', { max: 1.5, step: 0.05 }),
         settingRange('Eco de sala (reverb)', 'reverb'),
         settingRange('Repetición (delay)', 'delay', { max: 0.7 }),
       ),

@@ -219,8 +219,10 @@ export class ChordTutorial {
     this.status.className = 'tut-status';
     const prog = st.progress ? st.progress(this.mem) : '';
     this.status.replaceChildren(
-      h('span', prog || (holdP > 0 ? 'Mantén el gesto…' : '👀 Esperando el gesto…')),
-      st.hold !== 0 ? h('div.tut-hold', h('div', { style: { width: holdP * 100 + '%' } })) : null,
+      ...[
+        h('span', prog || (holdP > 0 ? 'Mantén el gesto…' : '👀 Esperando el gesto…')),
+        st.hold !== 0 ? h('div.tut-hold', h('div', { style: { width: holdP * 100 + '%' } })) : null,
+      ].filter(Boolean),
     );
   }
 
