@@ -185,31 +185,34 @@ export function mount(root, params = {}) {
       ),
     );
     const go = (v) => navigate(v, { songName: name, practiceTrack });
+    // Sin los null: replaceChildren los escribiría como texto "null".
     detail.replaceChildren(
-      h('button.btn.icon.panel-close', { title: 'Cerrar', onclick: () => detail.classList.remove('open') }, '✕'),
-      h('h2', displayName(name)),
-      song.title.toLowerCase() !== displayName(name).toLowerCase() ? h('p.muted.song-subtitle', song.title) : null,
-      h('div.song-meta',
-        h('span', '⏱️ ', formatTime(song.duration)),
-        h('span', '🥁 ', song.bpm, ' ppm'),
-        h('span', '🎼 ', song.timeSignature.join('/')),
-        h('span', song.hasLyrics ? '🎤 Con letra' : '🎹 Sin letra'),
-      ),
-      h('div.mode-buttons',
-        h('button.mode-btn', { onclick: () => go('tutorial-piano') }, h('span.mode-emoji', '🎹'), h('b', 'Tutorial de piano'), h('small', 'Las notas caen sobre el teclado')),
-        h('button.mode-btn', { onclick: () => go('tutorial-synth') }, h('span.mode-emoji', '🖐️'), h('b', 'Tutorial con las manos'), h('small', 'La cámara te dice dónde poner la mano')),
-        h('button.mode-btn', { onclick: () => go('karaoke') }, h('span.mode-emoji', '🎤'), h('b', 'Karaoke'), h('small', song.hasLyrics ? 'Letra grande con bolita' : 'Sin letra: se cantan los nombres de las notas')),
-        h('button.mode-btn', { onclick: () => go('karaoke-chords') }, h('span.mode-emoji', '🤟'), h('b', 'Karaoke de acordes'), h('small', 'Pon los acordes con las manos mientras suena la canción')),
-      ),
-      playable.length > 1
-        ? h('details.advanced',
-            h('summary', 'Opciones avanzadas'),
-            h('label.field', h('span.field-label', 'Pista que toca el alumno'), trackSel),
-            h('p.muted', 'La ★ marca la melodía detectada automáticamente. El resto de pistas suena como acompañamiento.'),
-          )
-        : null,
-      h('div.spacer'),
-      removeButton(name),
+      ...[
+        h('button.btn.icon.panel-close', { title: 'Cerrar', onclick: () => detail.classList.remove('open') }, '✕'),
+        h('h2', displayName(name)),
+        song.title.toLowerCase() !== displayName(name).toLowerCase() ? h('p.muted.song-subtitle', song.title) : null,
+        h('div.song-meta',
+          h('span', '⏱️ ', formatTime(song.duration)),
+          h('span', '🥁 ', song.bpm, ' ppm'),
+          h('span', '🎼 ', song.timeSignature.join('/')),
+          h('span', song.hasLyrics ? '🎤 Con letra' : '🎹 Sin letra'),
+        ),
+        h('div.mode-buttons',
+          h('button.mode-btn', { onclick: () => go('tutorial-piano') }, h('span.mode-emoji', '🎹'), h('b', 'Tutorial de piano'), h('small', 'Las notas caen sobre el teclado')),
+          h('button.mode-btn', { onclick: () => go('tutorial-synth') }, h('span.mode-emoji', '🖐️'), h('b', 'Tutorial con las manos'), h('small', 'La cámara te dice dónde poner la mano')),
+          h('button.mode-btn', { onclick: () => go('karaoke') }, h('span.mode-emoji', '🎤'), h('b', 'Karaoke'), h('small', song.hasLyrics ? 'Letra grande con bolita' : 'Sin letra: se cantan los nombres de las notas')),
+          h('button.mode-btn', { onclick: () => go('karaoke-chords') }, h('span.mode-emoji', '🤟'), h('b', 'Karaoke de acordes'), h('small', 'Pon los acordes con las manos mientras suena la canción')),
+        ),
+        playable.length > 1
+          ? h('details.advanced',
+              h('summary', 'Opciones avanzadas'),
+              h('label.field', h('span.field-label', 'Pista que toca el alumno'), trackSel),
+              h('p.muted', 'La ★ marca la melodía detectada automáticamente. El resto de pistas suena como acompañamiento.'),
+            )
+          : null,
+        h('div.spacer'),
+        removeButton(name),
+      ].filter(Boolean),
     );
   }
 

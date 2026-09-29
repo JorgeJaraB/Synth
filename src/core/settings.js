@@ -43,6 +43,7 @@ export const DEFAULTS = {
   tutorialSpeed: 1.0,
   accompaniment: true,
   accompanimentVolume: 0.6,
+  kcOriginalBacking: false, // karaoke de acordes: que suene también el piano original de la canción
   metronome: false,
   lookahead: 3, // segundos de notas visibles cayendo
 };
