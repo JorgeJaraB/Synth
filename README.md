@@ -9,7 +9,7 @@ Sintetizador y piano que se tocan **con las manos delante de la cámara** o **co
 | 🖐️ **Sintetizador con las manos** | Cada dedo índice es una voz. Subes o bajas la mano para cambiar de nota y la mueves a los lados para cambiar el brillo o el volumen. Con el puño cerrado se calla. Tiene dos tipos de tono: **notas fijas** (salta de nota en nota dentro de una escala, así que siempre suena afinado) y **theremin** (el tono se desliza de forma continua, con un indicador de afinación). |
 | 🤟 **Acordes con gestos** | Como en lengua de signos: con una mano formas el acorde (1 a 5 dedos = I a V, 🤘 = VI, 🤟 = VII; inclinarla cambia entre mayor y menor) y con la otra eliges la variante (tríada, inversión, séptima), el volumen (altura) y el brillo (inclinación). Incluye un **tutorial interactivo paso a paso** (la app comprueba cada gesto con la cámara), progresiones guiadas (I–IV–V–I, pop, blues…) y opción de arpegio. Inspirado en *Gesture Synth* de Eric Wei. |
 | 🎹 **Piano táctil** | Teclado multitoque en la pantalla. También se toca con el ratón o con el teclado del ordenador. |
-| ✨ **Piano en el aire** | Aparece un teclado sobre la imagen de la cámara. Con la mano cerrada no suena nada; al **extender un dedo** suena la tecla que tiene debajo y al doblarlo se para. |
+| ✨ **Piano en el aire** | Abajo de la imagen de la cámara aparece un teclado en perspectiva, como visto desde el sitio del pianista. Con la palma hacia abajo, suena la tecla cuando **bajas un dedo más que los demás**, como en un piano de verdad (y más fuerte cuanto más rápido lo bajas). En *Opciones* se cambia la sensibilidad, o se vuelve al modo antiguo de **extender un dedo**. |
 | 📚 **Canciones y tutoriales** | Lee archivos MIDI (`.mid`) y karaoke (`.kar`) de una carpeta. Hay dos tutoriales: uno de piano con notas que caen y otro con las manos, donde un anillo te indica dónde colocar el dedo. |
 | 🤟 **Karaoke de acordes** | Suena la canción con su letra y el alumno pone los acordes con las manos. La app deduce la tonalidad y los acordes del MIDI, los muestra encima de la letra y en una cinta con el dibujo de la mano, y en modo *Practicar* espera a que se haga cada acorde. |
 | 🎤 **Karaoke** | Letra gigante con una bolita que salta de sílaba en sílaba, fondo animado y la melodía en colores. Si la canción no tiene letra, se cantan los nombres de las notas. |
@@ -74,7 +74,7 @@ Más cosas útiles:
 ### Consejos para la cámara
 
 - Con la **cámara del portátil**: siéntate a un brazo de distancia, inclina un poco la pantalla hacia atrás y busca **buena luz de frente** (evita tener una ventana a la espalda).
-- En el piano en el aire, el teclado aparece a media altura de la imagen, con una octava de teclas grandes. Puedes cambiar su altura y su tamaño en *Piano → Opciones*.
+- En el piano en el aire, el teclado aparece abajo, con una octava de teclas grandes. Pon las manos en la parte de abajo de la imagen, como sobre un piano. Si cuesta que suene (o suena sin querer), cambia la *Sensibilidad* en *Piano → Opciones*. Ahí también se elige el número de octavas.
 - En **Ajustes** puedes elegir la cámara si hay más de una y probarla.
 - Si la cámara no se enciende:
   - Revisa *Configuración de Windows → Privacidad y seguridad → Cámara* y activa **"Permitir que las aplicaciones de escritorio accedan a la cámara"**.

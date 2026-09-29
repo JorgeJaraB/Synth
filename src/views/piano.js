@@ -14,6 +14,12 @@ const RANGES = [
   ['60-72', '1 octava grande (Do4–Do5)'],
 ];
 
+export function airPianoHint() {
+  return settings.airPianoMode === 'extender'
+    ? '✊ Pon la mano cerrada sobre el teclado y ☝️ extiende un dedo para tocar la tecla que tiene debajo. Al doblarlo, la nota se para. Si no llegas bien, cambia la altura del teclado en Opciones.'
+    : '🖐️ Pon las manos abajo, con la palma hacia la mesa, como en un piano. 👇 Baja un dedo más que los otros para tocar la tecla que tiene debajo; al subirlo, la nota se para. Si cuesta, cambia la sensibilidad en Opciones.';
+}
+
 export function mount(root, params = {}) {
   let mode = params.mode || 'pantalla';
   let cleanup = null;
@@ -29,6 +35,17 @@ export function mount(root, params = {}) {
     h('div.spacer'),
     recent,
   );
+  const sensField = settingSelect('Sensibilidad al bajar el dedo', 'airPianoSensitivity', [
+    ['alta', 'Alta (basta con bajarlo un poco)'],
+    ['normal', 'Normal'],
+    ['baja', 'Baja (hay que bajarlo bastante)'],
+  ]);
+  const posField = settingSelect('Altura del teclado en la cámara', 'airPianoPosition', [['arriba', 'Arriba'], ['centro', 'En el centro (portátil)'], ['abajo', 'Abajo']]);
+  const syncOptions = () => {
+    sensField.hidden = settings.airPianoMode === 'extender';
+    posField.hidden = settings.airPianoMode !== 'extender';
+  };
+  syncOptions();
   const panel = h(
     'aside.panel',
     h('h2', 'Opciones'),
@@ -43,7 +60,12 @@ export function mount(root, params = {}) {
       [4, '4 octavas (teclas pequeñas)'],
     ], render),
     settingSelect('Empieza en', 'airPianoStart', [[36, 'Do2 (grave)'], [48, 'Do3'], [60, 'Do4 (central)'], [72, 'Do5']], render),
-    settingSelect('Altura del teclado en la cámara', 'airPianoPosition', [['arriba', 'Arriba'], ['centro', 'En el centro (portátil)'], ['abajo', 'Abajo']]),
+    settingSelect('Cómo se toca en el aire', 'airPianoMode', [
+      ['pulsar', '👇 Bajar un dedo (como un piano)'],
+      ['extender', '☝️ Extender un dedo'],
+    ], () => { syncOptions(); render(); }),
+    sensField,
+    posField,
     settingToggle('Mostrar nombres en las teclas', 'pianoLabels'),
     settingSelect('Nombres de las notas', 'notation', [['solfeo', 'Do, Re, Mi'], ['letras', 'C, D, E'], ['colores', 'Colores']]),
     settingRange('Eco de sala (reverb)', 'reverb'),
@@ -138,7 +160,7 @@ export function mount(root, params = {}) {
           air.draw(ctx);
         },
       });
-      wrap.append(h('div.hint-card.compact', '✊ Pon la mano cerrada sobre el teclado y ☝️ extiende un dedo para tocar la tecla que tiene debajo. Al doblarlo, la nota se para. Si no llegas bien, cambia la altura del teclado en Opciones.'));
+      wrap.append(h('div.hint-card.compact', airPianoHint()));
       cleanup = () => {
         air.releaseAll();
         stage.destroy();
