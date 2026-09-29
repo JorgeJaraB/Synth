@@ -8,7 +8,7 @@ import { noteColor, noteName } from '../core/notes.js';
 import { navigate } from '../router.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { h, segmented, fitCanvas } from '../ui/dom.js';
-import { Transport, speedSelect, toggleButton, resultOverlay } from '../ui/transport.js';
+import { Transport, speedSelect, accompanimentControl, resultOverlay } from '../ui/transport.js';
 import { toggleClassMode } from '../main.js';
 
 export function mount(root, params) {
@@ -21,7 +21,7 @@ export function mount(root, params) {
 
   const titleEl = h('h2.song-title', 'Cargando…');
   const transport = new Transport(() => player, {
-    extras: [speedSelect(() => player), toggleButton('🎼 Acompañamiento', 'accompaniment')],
+    extras: [speedSelect(() => player), accompanimentControl()],
   });
   const textSel = h('span');
   const toolbar = h(
