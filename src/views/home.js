@@ -4,6 +4,7 @@ import { h } from '../ui/dom.js';
 
 const MODES = [
   { view: 'synth', emoji: '🖐️', title: 'Sintetizador con las manos', text: 'Sube y baja la mano delante de la cámara para hacer música.', color: '#ff9f1c' },
+  { view: 'chords', emoji: '🤟', title: 'Acordes con gestos', text: 'Forma acordes con los dedos, como en lengua de signos. ¡Armonía con las manos!', color: '#06d6a0' },
   { view: 'piano', emoji: '🎹', title: 'Piano táctil', text: 'Toca las teclas en la pantalla con los dedos.', color: '#2ec4b6' },
   { view: 'piano', params: { mode: 'camara' }, emoji: '✨', title: 'Piano en el aire', text: 'Un piano mágico que aparece en la cámara.', color: '#e71d73' },
   { view: 'library', emoji: '📚', title: 'Canciones y tutoriales', text: 'Aprende canciones paso a paso, con notas que caen.', color: '#7b61ff' },

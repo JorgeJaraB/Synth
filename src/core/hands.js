@@ -76,7 +76,10 @@ export function analyzeHand(lm) {
   for (const f of ['index', 'middle', 'ring', 'pinky']) {
     extended[f] = dist(wrist, lm[TIP[f]]) > dist(wrist, lm[PIP[f]]) * 1.12;
   }
-  extended.thumb = dist(lm[TIP.thumb], lm[17]) > dist(lm[PIP.thumb], lm[17]) * 1.05;
+  // Pulgar fuera: la punta se aleja de la palma y además está separada del índice
+  // (si está pegado al lado del índice no cuenta; importante para contar dedos).
+  extended.thumb =
+    dist(lm[TIP.thumb], lm[17]) > dist(lm[PIP.thumb], lm[17]) * 1.05 && dist(lm[TIP.thumb], lm[5]) / size > 0.5;
   const pinchDist = dist(lm[TIP.thumb], lm[TIP.index]) / size;
   const nExt = ['index', 'middle', 'ring', 'pinky'].filter((f) => extended[f]).length;
   return {

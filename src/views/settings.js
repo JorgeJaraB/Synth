@@ -80,6 +80,7 @@ export function mount(root) {
         h('p', 'Synth Manos funciona sin internet. La detección de manos usa MediaPipe (Google, licencia Apache 2.0).'),
         h('p', 'Piano: muestras "Salamander Grand Piano" de Alexander Holm (licencia CC-BY 3.0).'),
         h('p', 'Canciones de ejemplo: melodías populares de dominio público.'),
+        h('p', 'Acordes con gestos: idea inspirada en «Gesture Synth» de Eric Wei (indecisive.eric).'),
       ),
     ),
   );

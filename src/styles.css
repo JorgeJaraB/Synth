@@ -1201,3 +1201,194 @@ body.clase .lyric-line.current {
     align-self: flex-end;
   }
 }
+
+/* ---------- Acordes con gestos ---------- */
+.chord-legend {
+  display: grid;
+  gap: 4px;
+}
+.legend-row {
+  display: grid;
+  grid-template-columns: 44px 1fr auto 56px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--surface);
+  border-left: 5px solid var(--c, transparent);
+  transition: background 0.15s, transform 0.15s;
+}
+.legend-row.active {
+  background: color-mix(in srgb, var(--c) 35%, var(--surface));
+  transform: translateX(-4px);
+}
+.legend-row.muted-row {
+  opacity: 0.7;
+}
+.legend-sign {
+  display: grid;
+  place-items: center;
+}
+.legend-text {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.legend-roman {
+  font-weight: 900;
+  font-size: 1.05rem;
+}
+.legend-chord {
+  font-weight: 800;
+  text-align: right;
+}
+.legend-title {
+  font-size: 1rem;
+  margin: 8px 0 0;
+}
+.expr-legend {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+.credit {
+  font-size: 0.8rem;
+  margin-top: 8px;
+}
+.progression {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+  pointer-events: none;
+}
+.progression:empty {
+  display: none;
+}
+.prog-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 58px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: rgba(15, 16, 32, 0.75);
+  color: #fff;
+  border: 2px solid transparent;
+  transition: transform 0.2s;
+}
+.prog-chip b {
+  font-size: 1.3rem;
+}
+.prog-chip small {
+  opacity: 0.8;
+  font-weight: 700;
+}
+.prog-chip.next {
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 45%, rgba(15, 16, 32, 0.8));
+  transform: scale(1.15);
+}
+.prog-chip.done {
+  opacity: 0.45;
+}
+
+/* ---------- Tutorial de acordes ---------- */
+.tut-btn {
+  width: 100%;
+}
+.tut-card {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 12px;
+  width: min(430px, calc(100% - 32px));
+  z-index: 6;
+  background: rgba(15, 16, 32, 0.9);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  padding: 14px 16px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.tut-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 800;
+  color: #c7cae6;
+  font-size: 0.9rem;
+}
+.tut-progress {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  margin: 8px 0 12px;
+  overflow: hidden;
+}
+.tut-progress > div {
+  height: 100%;
+  background: linear-gradient(90deg, #06d6a0, #ff9f1c);
+  transition: width 0.4s;
+}
+.tut-body {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.tut-hand {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--c) 45%, transparent), transparent 70%);
+}
+.tut-text h3 {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+}
+.tut-text p {
+  margin: 0 0 8px;
+  color: #dfe1f5;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+.tut-status {
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: #ffbf69;
+  white-space: pre-wrap;
+}
+.tut-status.ok {
+  color: #06d6a0;
+  font-size: 1.1rem;
+  animation: pop 0.3s ease-out;
+}
+.tut-hold {
+  height: 8px;
+  margin-top: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.tut-hold > div {
+  height: 100%;
+  background: #06d6a0;
+  transition: width 0.1s;
+}
+.tut-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+body.clase .tut-card {
+  display: block;
+}

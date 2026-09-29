@@ -133,5 +133,6 @@ export function confetti(parent) {
       },
     });
     parent.append(c);
+    setTimeout(() => c.remove(), 5000);
   }
 }

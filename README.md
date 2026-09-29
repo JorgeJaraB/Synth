@@ -7,6 +7,7 @@ Sintetizador y piano que se tocan **con las manos delante de la cámara** o **co
 | Modo | Qué hace |
 |---|---|
 | 🖐️ **Sintetizador con las manos** | Cada dedo índice es una voz. Subes o bajas la mano para cambiar de nota y la mueves a los lados para cambiar el brillo o el volumen. Con el puño cerrado se calla. Tiene dos tipos de tono: **notas fijas** (salta de nota en nota dentro de una escala, así que siempre suena afinado) y **theremin** (el tono se desliza de forma continua, con un indicador de afinación). |
+| 🤟 **Acordes con gestos** | Como en lengua de signos: con una mano formas el acorde (1 a 5 dedos = I a V, 🤘 = VI, 🤟 = VII; inclinarla cambia entre mayor y menor) y con la otra eliges la variante (tríada, inversión, séptima), el volumen (altura) y el brillo (inclinación). Incluye un **tutorial interactivo paso a paso** (la app comprueba cada gesto con la cámara), progresiones guiadas (I–IV–V–I, pop, blues…) y opción de arpegio. Inspirado en *Gesture Synth* de Eric Wei. |
 | 🎹 **Piano táctil** | Teclado multitoque en la pantalla. También se toca con el ratón o con el teclado del ordenador. |
 | ✨ **Piano en el aire** | Aparece un teclado sobre la imagen de la cámara y suena la tecla sobre la que bajas un dedo. |
 | 📚 **Canciones y tutoriales** | Lee archivos MIDI (`.mid`) y karaoke (`.kar`) de una carpeta. Hay dos tutoriales: uno de piano con notas que caen y otro con las manos, donde un anillo te indica dónde colocar el dedo. |
@@ -108,6 +109,7 @@ Todo funciona en local:
 
 ## Licencias y créditos
 
+- Modo *Acordes con gestos*: idea inspirada en [Gesture Synth](https://github.com/ericwei97-cloud/gesture-synth) de Eric Wei (indecisive.eric); implementación propia.
 - Detección de manos: [MediaPipe](https://developers.google.com/mediapipe) (Apache 2.0).
 - Audio: [Tone.js](https://tonejs.github.io/) (MIT).
 - Piano: muestras *Salamander Grand Piano* de Alexander Holm (CC-BY 3.0).

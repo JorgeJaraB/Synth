@@ -25,7 +25,8 @@ export class AirPiano {
     return this.range?.low ?? settings.airPianoStart;
   }
   get high() {
-    return this.range?.high ?? settings.airPianoStart + settings.airPianoOctaves * 12;
+    // Sin pasar de Do8, la tecla más aguda de un piano de verdad.
+    return this.range?.high ?? Math.min(108, settings.airPianoStart + settings.airPianoOctaves * 12);
   }
 
   /** Región del teclado en la pantalla. */

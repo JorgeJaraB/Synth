@@ -74,7 +74,7 @@ export function drawLanes(ctx, w, lanes, area, active = new Set(), targets = new
 }
 
 /** Onda del sonido, brillante como en el vídeo. */
-export function drawWave(ctx, w, hh) {
+export function drawWave(ctx, w, hh, rgb = null) {
   const data = audio.getWaveform();
   if (!data) return;
   const level = audio.getLevel();
@@ -91,14 +91,35 @@ export function drawWave(ctx, w, hh) {
       const y = baseY + data[(i + off) % data.length] * amp * env + Math.sin(i * 0.02 + performance.now() * 0.002 + s) * 3;
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
-    ctx.strokeStyle = `rgba(255,${150 + s * 25},${40 + s * 20},${0.55 - s * 0.12})`;
+    ctx.strokeStyle = rgb ? `rgba(${rgb},${0.7 - s * 0.18})` : `rgba(255,${150 + s * 25},${40 + s * 20},${0.55 - s * 0.12})`;
     ctx.lineWidth = 2.5 - s * 0.6;
-    ctx.shadowColor = 'rgba(255,160,40,0.9)';
+    ctx.shadowColor = rgb ? `rgba(${rgb},0.9)` : 'rgba(255,160,40,0.9)';
     ctx.shadowBlur = 12;
     ctx.stroke();
   }
   ctx.restore();
 }
+
+/** ¿Debe sonar esta mano? Según "Cómo se activa el sonido" (se usa también en las canciones). */
+export function handIsOn(hand) {
+  if (settings.synthTrigger === 'pinza') return hand.pinch;
+  if (settings.synthTrigger === 'siempre') return true;
+  return hand.indexUp && !hand.fist;
+}
+
+/** Punto que marca la nota: la punta del índice, o el centro de la pinza. */
+export function handPoint(hand) {
+  const lm = hand.landmarks;
+  if (settings.synthTrigger === 'pinza') return { x: (lm[4].x + lm[8].x) / 2, y: (lm[4].y + lm[8].y) / 2 };
+  return lm[TIP.index];
+}
+
+/** Opciones del desplegable "Cómo se activa el sonido". */
+export const TRIGGER_OPTIONS = [
+  ['indice', '☝️ Índice levantado'],
+  ['pinza', '👌 Juntar pulgar e índice'],
+  ['siempre', '✋ Siempre que haya mano'],
+];
 
 export function mount(root) {
   const voices = new Map(); // hand.key → {voice, lane, trail}
@@ -129,11 +150,6 @@ export function mount(root) {
   root.append(view);
   stageWrap.append(hint);
 
-  const isOn = (hand) => {
-    if (settings.synthTrigger === 'pinza') return hand.pinch;
-    if (settings.synthTrigger === 'siempre') return true;
-    return hand.indexUp && !hand.fist;
-  };
 
   function rebuildVoices() {
     for (const v of voices.values()) v.voice.dispose();
@@ -153,10 +169,7 @@ export function mount(root) {
           v = { voice: audio.createVoice(settings.synthInstrument), lane: null, trail: [] };
           voices.set(hand.key, v);
         }
-        const tipIdx = settings.synthTrigger === 'pinza' ? null : TIP.index;
-        const lm = hand.landmarks;
-        const pt = tipIdx != null ? lm[tipIdx] : { x: (lm[4].x + lm[8].x) / 2, y: (lm[4].y + lm[8].y) / 2 };
-        const p = st.toScreen(pt);
+        const p = st.toScreen(handPoint(hand));
         let midi;
         if (settings.synthPitchMode === 'libre') {
           // Theremin: el tono sigue a la mano sin saltos; mostramos la nota más cercana.
@@ -175,7 +188,7 @@ export function mount(root) {
         if (settings.synthXControl === 'brillo') v.voice.setBrightness(0.25 + xN * 0.75);
         else v.voice.setBrightness(0.8);
         v.voice.setGain(settings.synthXControl === 'volumen' ? 0.25 + xN * 0.75 : 0.8);
-        const on = isOn(hand);
+        const on = handIsOn(hand);
         if (on) {
           v.voice.start();
           active.add(midi);
@@ -272,11 +285,7 @@ function buildPanel(onChange) {
       settingSelect('Nota más grave', 'synthLow', RANGE_OPTIONS.slice(0, -1), onChange),
       settingSelect('Nota más aguda', 'synthHigh', RANGE_OPTIONS.slice(1), onChange),
     ),
-    settingSelect('Cómo se activa el sonido', 'synthTrigger', [
-      ['indice', '☝️ Índice levantado'],
-      ['pinza', '👌 Juntar pulgar e índice'],
-      ['siempre', '✋ Siempre que haya mano'],
-    ]),
+    settingSelect('Cómo se activa el sonido', 'synthTrigger', TRIGGER_OPTIONS),
     settingSelect('Mover la mano a los lados cambia…', 'synthXControl', [
       ['brillo', 'El brillo del sonido'],
       ['volumen', 'El volumen'],

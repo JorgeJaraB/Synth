@@ -119,7 +119,8 @@ export function mount(root, params) {
     cleanupInput?.();
     body.replaceChildren();
     audio.releaseAll();
-    const [lo, hi] = rangeFor(practiceNotes, input === 'camara' ? 1 : 2);
+    // Con la cámara se respeta el número de octavas elegido en Piano → Opciones.
+    const [lo, hi] = rangeFor(practiceNotes, input === 'camara' ? settings.airPianoOctaves : 2);
     if (input === 'pantalla') {
       const fallCanvas = h('canvas.fall-canvas');
       const kbCanvas = h('canvas.keyboard-canvas.tutorial-kb');

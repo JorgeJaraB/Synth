@@ -8,6 +8,7 @@ import { h, toast } from './ui/dom.js';
 registerView('home', () => import('./views/home.js'));
 registerView('synth', () => import('./views/synth.js'));
 registerView('piano', () => import('./views/piano.js'));
+registerView('chords', () => import('./views/chords.js'));
 registerView('library', () => import('./views/library.js'));
 registerView('tutorial-piano', () => import('./views/tutorial-piano.js'));
 registerView('tutorial-synth', () => import('./views/tutorial-synth.js'));
@@ -17,6 +18,7 @@ registerView('settings', () => import('./views/settings.js'));
 const NAV = [
   ['home', '🏠', 'Inicio'],
   ['synth', '🖐️', 'Sintetizador'],
+  ['chords', '🤟', 'Acordes'],
   ['piano', '🎹', 'Piano'],
   ['library', '📚', 'Canciones'],
   ['settings', '⚙️', 'Ajustes'],

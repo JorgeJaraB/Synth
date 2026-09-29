@@ -223,6 +223,11 @@ class AudioEngine {
     return new ContinuousVoice(this, instrument);
   }
 
+  /** Voz de acordes para el modo "Acordes con gestos". */
+  createChordVoice(instrument = 'suave') {
+    return new ChordVoice(this, instrument);
+  }
+
   getWaveform() {
     return this.ready ? this.analyser.getValue() : null;
   }
@@ -327,6 +332,92 @@ class ContinuousVoice {
       this.filter.dispose();
       this.out.dispose();
     }, 800);
+  }
+}
+
+/**
+ * Varias notas a la vez con volumen y brillo continuos. Al cambiar de acorde solo
+ * se sueltan las notas que sobran y se atacan las nuevas (las comunes siguen sonando).
+ */
+class ChordVoice {
+  constructor(engine, instrument) {
+    this.engine = engine;
+    this.out = new Tone.Gain(0).connect(engine.bus);
+    this.filter = new Tone.Filter(3000, 'lowpass', -24).connect(this.out);
+    this.synth = engine._makePoly(instrument, this.filter);
+    this.sampled = !!INSTRUMENTS[instrument]?.sampled;
+    this.notes = [];
+    this.arpeggio = false;
+    this.arpIndex = 0;
+    this.nextArp = 0;
+    this.bpm = 110;
+  }
+
+  _names(notes) {
+    return notes.map(toneName);
+  }
+
+  setChord(notes) {
+    const next = notes || [];
+    if (this.arpeggio) {
+      this.notes = next;
+      return;
+    }
+    const drop = this.notes.filter((m) => !next.includes(m));
+    const add = next.filter((m) => !this.notes.includes(m));
+    if (drop.length) this.synth.triggerRelease(this._names(drop), '+0.005');
+    if (add.length) this.synth.triggerAttack(this._names(add), '+0.01', 0.55);
+    this.notes = next;
+  }
+
+  setArpeggio(on) {
+    if (on === this.arpeggio) return;
+    this.synth.releaseAll?.();
+    this.arpeggio = on;
+    const keep = this.notes;
+    this.notes = [];
+    if (!on) this.setChord(keep);
+    else this.notes = keep;
+  }
+
+  /** Llamar en cada fotograma: toca la siguiente nota del arpegio cuando toca. */
+  tick() {
+    if (!this.arpeggio || !this.notes.length) return;
+    const now = Tone.now();
+    if (now < this.nextArp - 0.05) return;
+    const step = 60 / this.bpm / 2;
+    const t = Math.max(now, this.nextArp);
+    // Sube y baja por las notas del acorde (sin el bajo), como en un arpegio de piano.
+    const up = this.notes.slice(1);
+    const seq = up.concat(up.slice(1, -1).reverse());
+    const m = seq[this.arpIndex % seq.length] ?? this.notes[0];
+    this.synth.triggerAttackRelease(toneName(m), step * 0.9, t, 0.6);
+    if (this.arpIndex % seq.length === 0) this.synth.triggerAttackRelease(toneName(this.notes[0]), step * 3.5, t, 0.5);
+    this.arpIndex++;
+    this.nextArp = t + step;
+  }
+
+  setVolume(v) {
+    this.out.gain.rampTo(Math.max(0, Math.min(1, v)) * 0.9, 0.08);
+  }
+
+  setBrightness(b) {
+    this.filter.frequency.rampTo(250 * Math.pow(48, Math.max(0, Math.min(1, b))), 0.08);
+  }
+
+  silence() {
+    this.synth.releaseAll?.();
+    this.notes = [];
+  }
+
+  dispose() {
+    this.silence();
+    this.out.gain.rampTo(0, 0.3);
+    setTimeout(() => {
+      this.synth.dispose();
+      this.filter.dispose();
+      this.out.dispose();
+    }, 1500);
   }
 }
 

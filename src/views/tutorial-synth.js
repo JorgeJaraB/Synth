@@ -6,13 +6,12 @@ import { loadSong } from '../core/library.js';
 import { SongPlayer } from '../core/player.js';
 import { monophonic } from '../core/midi-parse.js';
 import { noteColor, noteName } from '../core/notes.js';
-import { TIP } from '../core/hands.js';
 import { navigate } from '../router.js';
 import { CameraStage } from '../ui/camera-stage.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { h } from '../ui/dom.js';
 import { Transport, speedSelect, toggleButton, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
-import { laneFromY, laneY, drawWave } from './synth.js';
+import { laneFromY, laneY, drawWave, handIsOn, handPoint, TRIGGER_OPTIONS } from './synth.js';
 
 const PLAY_X = 0.28; // posición de la línea de juego (fracción del ancho)
 
@@ -25,6 +24,12 @@ export function mount(root, params) {
   const voices = new Map();
 
   const score = scoreBox();
+  // Misma opción que en el sintetizador: índice, pinza o siempre.
+  const triggerSelect = h(
+    'select.compact',
+    { title: 'Cómo se activa el sonido', onchange: (e) => { settings.synthTrigger = e.target.value; updateHint(); } },
+    TRIGGER_OPTIONS.map(([v, t]) => h('option', { value: v, selected: v === settings.synthTrigger }, t)),
+  );
   const transport = new Transport(() => player, {
     extras: [speedSelect(() => player), toggleButton('🎼 Acompañamiento', 'accompaniment'), toggleButton('🥁 Metrónomo', 'metronome')],
   });
@@ -35,13 +40,26 @@ export function mount(root, params) {
     titleEl,
     h('div.spacer'),
     modeSelector(mode, (m) => { mode = m; player.mode = m; player.restart(); }),
+    triggerSelect,
     score.el,
   );
   const lyricsHost = h('div.lyrics-host');
   const stageWrap = h('div.stage-wrap');
   const view = h('div.view.tutorial', toolbar, lyricsHost, h('div.tutorial-body', stageWrap), transport.el);
   root.append(view);
-  stageWrap.append(h('div.hint-card.compact', '☝️ Pon el dedo índice dentro del anillo brillante. Cuando la nota llegue a la línea, ¡mantenla ahí!'));
+  const hintEl = h('div.hint-card.compact');
+  const updateHint = () => {
+    hintEl.textContent = settings.synthTrigger === 'pinza'
+      ? '👌 Junta el pulgar y el índice dentro del anillo brillante para que suene. ¡Mantenlos ahí cuando llegue la nota!'
+      : settings.synthTrigger === 'siempre'
+        ? '✋ Pon la mano en el anillo brillante: suena siempre que se vea la mano.'
+        : '☝️ Pon el dedo índice dentro del anillo brillante. Cuando la nota llegue a la línea, ¡mantenla ahí!';
+    hintEl.style.animation = 'none';
+    void hintEl.offsetWidth;
+    hintEl.style.animation = '';
+  };
+  updateHint();
+  stageWrap.append(hintEl);
   let lyrics = null;
 
   // Misma zona segura que el sintetizador (la muñeca debe verse en la cámara del portátil).
@@ -132,7 +150,7 @@ export function mount(root, params) {
           v = { voice: audio.createVoice(settings.synthInstrument), lane: null };
           voices.set(hand.key, v);
         }
-        const p = st.toScreen(hand.landmarks[TIP.index]);
+        const p = st.toScreen(handPoint(hand));
         v.pos = p;
         if (!lanes.length) continue;
         v.lane = laneFromY(p.y, a, lanes.length, v.lane);
@@ -140,7 +158,7 @@ export function mount(root, params) {
         v.midi = midi;
         v.voice.setNote(midi);
         v.voice.setBrightness(0.8);
-        const on = hand.indexUp && !hand.fist && player?.mode !== 'escuchar';
+        const on = handIsOn(hand) && player?.mode !== 'escuchar';
         v.on = on;
         if (on) {
           v.voice.start();

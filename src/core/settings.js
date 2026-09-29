@@ -21,6 +21,13 @@ export const DEFAULTS = {
   mirror: true,
   showSkeleton: true,
   cameraId: '',
+  // Acordes con gestos
+  chordKey: 0, // tonalidad: 0 = Do, 2 = Re, 7 = Sol...
+  chordInstrument: 'suave',
+  chordLefty: false, // zurdo/a: la mano derecha elige el acorde
+  chordArpeggio: false,
+  chordProgression: 'ninguna',
+  chordTutorialDone: false,
   // Piano
   pianoInstrument: 'piano',
   pianoLow: 48,
