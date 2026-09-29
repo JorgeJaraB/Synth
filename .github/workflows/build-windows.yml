@@ -1,10 +1,15 @@
 name: Compilar para Windows
 
+# Cada vez que se suben cambios a la rama principal:
+#  1. se compila el instalador de Windows con un número de versión nuevo (1.0.<n>),
+#  2. se publica como "Release" con los archivos que usa la actualización automática.
+# Las apps ya instaladas encuentran la versión nueva, la descargan y la instalan al cerrarse.
+# Enlace fijo a la última versión:
+#   https://github.com/<usuario>/<repo>/releases/latest/download/SynthManos-Instalador.exe
+
 on:
   push:
     branches: ['**']
-    tags: ['v*']
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -13,6 +18,8 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
+    env:
+      ES_RAMA_PRINCIPAL: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,23 +34,59 @@ jobs:
       - name: Tests
         run: npm test
 
+      - name: Número de versión (1.0.${{ github.run_number }})
+        if: env.ES_RAMA_PRINCIPAL == 'true'
+        run: npm version 1.0.${{ github.run_number }} --no-git-tag-version --allow-same-version
+
+      - name: Token para los reportes de problemas (opcional)
+        # Si existe el secreto ISSUES_TOKEN, la app envía los reportes directamente
+        # (sin que el maestro necesite cuenta de GitHub). Si no, abre la web de GitHub.
+        env:
+          ISSUES_TOKEN: ${{ secrets.ISSUES_TOKEN }}
+        shell: bash
+        run: |
+          if [ -n "$ISSUES_TOKEN" ]; then
+            printf '{"token":"%s"}' "$ISSUES_TOKEN" > electron/report-config.json
+            echo "Reportes directos activados"
+          else
+            echo "Sin ISSUES_TOKEN: los reportes abrirán la web de GitHub"
+          fi
+
       - name: Compilar instalador y versión portable
         run: npm run dist:win
         env:
           # Sin certificado de firma: electron-builder no firma el .exe.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
-      - name: Subir los .exe
+      - name: Guardar los .exe como artefacto
         uses: actions/upload-artifact@v4
         with:
           name: SynthManos-Windows
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/latest.yml
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publicar versión (solo al crear una etiqueta v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publicar la release (solo desde la rama principal)
+        if: env.ES_RAMA_PRINCIPAL == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.exe
-          generate_release_notes: true
+          tag_name: v1.0.${{ github.run_number }}
+          name: Synth Manos 1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          # latest.yml y .blockmap son los que usa la actualización automática.
+          files: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          body: |
+            ## Cómo instalarlo
+            1. Descarga **SynthManos-Instalador.exe** (aquí abajo, en *Assets*).
+            2. Haz doble clic. Se instala solo y crea el icono **Synth Manos** en el escritorio.
+            3. Si Windows avisa con "Windows protegió su PC": **Más información → Ejecutar de todas formas**.
+
+            Una vez instalada, la app **se actualiza sola**: descarga las versiones nuevas y las instala al cerrarse.
+
+            ¿No se pueden instalar programas en este PC? Usa **SynthManos-Portable.exe** (esta no se actualiza sola).
