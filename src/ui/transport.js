@@ -1,5 +1,5 @@
 // Barra de reproducción compartida por tutoriales y karaoke.
-import { h, formatTime, segmented } from './dom.js';
+import { h, formatTime, segmented, isTyping } from './dom.js';
 import { settings } from '../core/settings.js';
 
 export function speedSelect(player) {
@@ -22,6 +22,22 @@ export function toggleButton(label, key, onChange) {
   return b;
 }
 
+/** Acompañamiento: botón para encenderlo/apagarlo y su volumen al lado. */
+export function accompanimentControl() {
+  const out = h('span.acc-value', Math.round(settings.accompanimentVolume * 100) + '%');
+  const range = h('input.acc-range', {
+    type: 'range', min: 0, max: 1.5, step: 0.05, value: settings.accompanimentVolume,
+    title: 'Volumen del acompañamiento',
+    oninput: () => {
+      settings.accompanimentVolume = Number(range.value);
+      out.textContent = Math.round(settings.accompanimentVolume * 100) + '%';
+      if (!settings.accompaniment) btn.click();
+    },
+  });
+  const btn = toggleButton('🎼 Acompañamiento', 'accompaniment');
+  return h('div.acc-control', btn, h('label.acc-volume', { title: 'Volumen del acompañamiento' }, '🔉', range, out));
+}
+
 export class Transport {
   constructor(getPlayer, { onRestart, extras = [] } = {}) {
     this.getPlayer = getPlayer;
@@ -41,7 +57,7 @@ export class Transport {
     this.bar.addEventListener('pointermove', (e) => dragging && seek(e));
     this.bar.addEventListener('pointerup', () => (dragging = false));
     this._key = (e) => {
-      if (e.code === 'Space' && !['INPUT', 'SELECT', 'BUTTON'].includes(document.activeElement?.tagName)) {
+      if (e.code === 'Space' && !isTyping() && document.activeElement?.tagName !== 'BUTTON') {
         e.preventDefault();
         this.toggle();
       }
