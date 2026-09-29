@@ -37,6 +37,8 @@ export const DEFAULTS = {
   airPianoOctaves: 1, // con la cámara del portátil, teclas grandes funcionan mejor
   airPianoPosition: 'centro', // 'abajo' | 'centro' | 'arriba'
   airPianoStart: 60,
+  airPianoMode: 'pulsar', // 'pulsar' (bajar un dedo, teclado en perspectiva abajo) | 'extender' (extender el dedo)
+  airPianoSensitivity: 'normal', // 'alta' | 'normal' | 'baja'
   // Tutoriales y karaoke
   tutorialSpeed: 1.0,
   accompaniment: true,
