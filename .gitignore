@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+# Se copian desde node_modules con "npm run assets"
+public/mediapipe/
+*.log
+.DS_Store
+entregas/

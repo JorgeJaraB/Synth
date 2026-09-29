@@ -1,0 +1,75 @@
+{
+  "name": "synth-manos",
+  "productName": "Synth Manos",
+  "version": "1.0.0",
+  "description": "Sintetizador y piano controlados con las manos (cámara) o con la pantalla táctil, pensado para clases de música.",
+  "main": "electron/main.cjs",
+  "author": "Synth Manos",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/fetch-assets.mjs",
+    "songs": "node scripts/make-songs.mjs",
+    "dev": "node scripts/fetch-assets.mjs && vite",
+    "build:web": "node scripts/fetch-assets.mjs && vite build",
+    "start": "npm run build:web && electron .",
+    "test": "node --test test/*.test.js",
+    "dist:win": "npm run build:web && electron-builder --win --x64 --publish never"
+  },
+  "devDependencies": {
+    "@fontsource-variable/nunito": "^5.3.0",
+    "@mediapipe/tasks-vision": "^1.0.1",
+    "@tonejs/midi": "^2.0.28",
+    "midi-file": "^1.2.4",
+    "tone": "^15.1.22",
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
+    "vite": "^8.3.1"
+  },
+  "build": {
+    "appId": "es.synthmanos.app",
+    "productName": "Synth Manos",
+    "copyright": "Synth Manos",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Synth Manos",
+      "runAfterFinish": true,
+      "artifactName": "SynthManos-Instalador-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "SynthManos-Portable-${version}.${ext}"
+    }
+  }
+}

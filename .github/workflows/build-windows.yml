@@ -1,0 +1,49 @@
+name: Compilar para Windows
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Compilar instalador y versión portable
+        run: npm run dist:win
+        env:
+          # Sin certificado de firma: electron-builder no firma el .exe.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Subir los .exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: SynthManos-Windows
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publicar versión (solo al crear una etiqueta v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
+          generate_release_notes: true
