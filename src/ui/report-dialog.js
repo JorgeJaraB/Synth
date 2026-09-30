@@ -2,12 +2,13 @@
 import { h, toast } from './dom.js';
 import { buildReport, issueUrl, REPO } from '../core/diagnostics.js';
 
-export async function openReportDialog() {
+/** @param {{ title?: string }} [opts]  resumen ya escrito (p. ej. al opinar sobre una parte concreta) */
+export async function openReportDialog({ title: presetTitle = '' } = {}) {
   if (document.querySelector('.report-overlay')) return;
   const api = window.synthAPI;
   // Envío directo (sin cuenta) si la app instalada trae el permiso; si no, se abre GitHub.
   const direct = !!(api?.canSendReport && (await api.canSendReport()));
-  const title = h('input.report-title', { type: 'text', placeholder: 'Ej.: El acorde Sol no suena con la mano abierta', maxLength: 120 });
+  const title = h('input.report-title', { type: 'text', placeholder: 'Ej.: El acorde Sol no suena con la mano abierta', maxLength: 120, value: presetTitle });
   const who = h('input.report-title', { type: 'text', placeholder: 'Ej.: Ana, CEIP San José (opcional)', maxLength: 80 });
   const desc = h('textarea.report-desc', { rows: 6, placeholder: '¿Qué estabas haciendo? ¿Qué esperabas que pasara y qué ha pasado? También puedes dejar ideas u opiniones.' });
   const tech = h('input', { type: 'checkbox', checked: true });
@@ -75,5 +76,5 @@ export async function openReportDialog() {
     ),
   );
   document.body.append(ov);
-  title.focus();
+  (presetTitle ? desc : title).focus();
 }

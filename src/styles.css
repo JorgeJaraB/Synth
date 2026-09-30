@@ -1572,6 +1572,32 @@ body.recording.clase .rec-float {
 }
 
 /* ---------- Reportar un problema ---------- */
+.wip-btn {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: #ffc83d;
+  color: #241f3d;
+  font-weight: 900;
+  font-size: 1.05rem;
+  cursor: pointer;
+  box-shadow: 0 0 0 0 rgba(255, 200, 61, 0.7);
+  animation: wip-pulse 2.2s infinite;
+}
+.wip-btn:hover {
+  transform: scale(1.1);
+}
+@keyframes wip-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(255, 200, 61, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(255, 200, 61, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 200, 61, 0); }
+}
+.wip-card p {
+  margin: 0;
+  line-height: 1.5;
+}
 .report-overlay {
   position: fixed;
   inset: 0;
