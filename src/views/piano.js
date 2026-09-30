@@ -160,7 +160,8 @@ export function mount(root, params = {}) {
           air.draw(ctx);
         },
       });
-      wrap.append(h('div.hint-card.compact', airPianoHint()));
+      // Con el teclado abajo, la ayuda va arriba para no taparlo.
+      wrap.append(h('div.hint-card.compact', { class: settings.airPianoMode === 'extender' ? '' : 'top' }, airPianoHint()));
       cleanup = () => {
         air.releaseAll();
         stage.destroy();
