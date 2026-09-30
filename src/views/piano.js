@@ -20,8 +20,35 @@ export function airPianoHint() {
     : '🖐️ Pon las manos abajo, con la palma hacia la mesa, como en un piano. 👇 Baja un dedo más que los otros para tocar la tecla que tiene debajo; al subirlo, la nota se para. Si cuesta, cambia la sensibilidad en Opciones.';
 }
 
+/** Nota para los maestros: el piano en el aire está en pruebas y se agradece su opinión. */
+function openWipNote() {
+  if (document.querySelector('.report-overlay')) return;
+  const close = () => ov.remove();
+  const ov = h(
+    'div.report-overlay',
+    { onclick: (e) => e.target === ov && close() },
+    h('div.report-card.wip-card',
+      h('h2', '🚧 Piano en el aire: en pruebas'),
+      h('p', 'Esta forma de tocar es nueva y todavía la estamos mejorando.'),
+      h('p', '¿Qué os parece? ¿Se pulsan bien las teclas blancas y las negras? ¿Cuesta que suene o suena sin querer? ¿Os gusta cómo se ve? Cualquier opinión nos ayuda mucho, ¡sentíos libres de contárnosla!'),
+      h('p', 'Si encontráis algún problema o tenéis alguna idea, pulsad el botón de la mariquita ', h('b', '🐞'), ' de arriba (o el de aquí abajo). No hace falta ninguna cuenta.'),
+      h('div.row.report-actions',
+        h('button.btn', { onclick: close }, 'Cerrar'),
+        h('button.btn.primary', {
+          onclick: () => {
+            close();
+            import('../ui/report-dialog.js').then((m) => m.openReportDialog({ title: 'Piano en el aire: ' }));
+          },
+        }, '🐞 Dar mi opinión'),
+      ),
+    ),
+  );
+  document.body.append(ov);
+}
+
 export function mount(root, params = {}) {
   let mode = params.mode || 'pantalla';
+  const wipBtn = h('button.wip-btn', { title: 'El piano en el aire está en pruebas: ¡cuéntanos qué te parece!', onclick: openWipNote }, '!');
   let cleanup = null;
   const body = h('div.piano-body');
   const recent = h('div.recent-notes');
@@ -32,6 +59,7 @@ export function mount(root, params = {}) {
       mode = m;
       render();
     }),
+    wipBtn,
     h('div.spacer'),
     recent,
   );
@@ -127,6 +155,7 @@ export function mount(root, params = {}) {
   }
 
   function render() {
+    wipBtn.hidden = mode !== 'camara';
     cleanup?.();
     body.replaceChildren();
     if (mode === 'pantalla') {
