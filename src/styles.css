@@ -557,6 +557,10 @@ input[type='range'] {
   display: grid;
   gap: 6px;
 }
+.hint-card.compact.top {
+  top: 12px;
+  bottom: auto;
+}
 .hint-card.compact {
   font-size: 0.9rem;
   top: auto;
