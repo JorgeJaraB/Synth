@@ -1,23 +1,18 @@
-// Detecta cuándo un dedo "pulsa" como en un piano de verdad: la mano está con la palma
-// hacia abajo y un dedo baja más que los demás. Trabaja con puntos en píxeles de pantalla.
+// Detecta cuándo un dedo "pulsa" como en un piano de verdad, con la palma hacia abajo.
+// Cada dedo va por su cuenta: se compara con su propia posición de reposo (no con los otros
+// dedos, porque una mano casi nunca está plana). La punta se mide respecto a su nudillo, así
+// que mover toda la mano no pulsa nada. Trabaja con puntos en píxeles de pantalla.
 
 export const FINGERS = ['thumb', 'index', 'middle', 'ring', 'pinky'];
 const TIP = { thumb: 4, index: 8, middle: 12, ring: 16, pinky: 20 };
 // Nudillo de cada dedo: la punta se mide respecto a él para que no influya la longitud del dedo.
 const KNUCKLE = { thumb: 2, index: 5, middle: 9, ring: 13, pinky: 17 };
-const LONG = ['index', 'middle', 'ring', 'pinky'];
 
 /** Umbrales (en anchos de palma) según la sensibilidad elegida. */
 export const SENSITIVITY = {
   alta: { on: 0.09, off: 0.045 },
   normal: { on: 0.13, off: 0.065 },
   baja: { on: 0.18, off: 0.09 },
-};
-
-const median = (a) => {
-  const s = [...a].sort((x, y) => x - y);
-  const m = s.length >> 1;
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
 
 export class FingerPress {
@@ -42,12 +37,9 @@ export class FingerPress {
       const p = hand.points;
       const palm = Math.hypot(p[5].x - p[17].x, p[5].y - p[17].y);
       if (!(palm > 4)) continue;
-      const rel = {};
-      for (const f of FINGERS) rel[f] = (p[TIP[f]].y - p[KNUCKLE[f]].y) / palm;
       for (const f of FINGERS) {
-        const others = LONG.filter((g) => g !== f).map((g) => rel[g]);
-        // Cuánto más abajo está este dedo que el resto (se anula si se mueve toda la mano).
-        const drop = rel[f] - median(others);
+        // Altura de la punta respecto a su nudillo, en anchos de palma (más = más abajo).
+        const drop = (p[TIP[f]].y - p[KNUCKLE[f]].y) / palm;
         const id = hand.key + ':' + f;
         seen.add(id);
         let s = this.state.get(id);

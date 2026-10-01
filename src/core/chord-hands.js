@@ -21,9 +21,10 @@ export function mode(list) {
 
 /** Volumen según la altura de la muñeca (0 = arriba, 1 = abajo de la imagen). */
 export function volumeFromHeight(y01) {
-  // Muñeca al 30 % de la altura o más arriba → volumen máximo; al 80 % → mínimo.
-  const t = Math.max(0, Math.min(1, (0.8 - y01) / 0.5));
-  return 0.2 + 0.8 * t;
+  // Muñeca al 25 % de la altura o más arriba → volumen máximo; al 85 % → mínimo, que se
+  // sigue oyendo bien (para callar, se quita la mano o se cierra el puño).
+  const t = Math.max(0, Math.min(1, (0.85 - y01) / 0.6));
+  return 0.35 + 0.65 * t;
 }
 
 /**
@@ -33,6 +34,19 @@ export function volumeFromHeight(y01) {
 const WINDOW_MS = 150;
 const MAJORITY = 0.6;
 const QUICK = 3; // si las últimas 3 detecciones coinciden, se acepta al momento
+
+/**
+ * Inclinación de la mano medida en píxeles de pantalla: los puntos de MediaPipe van de 0 a 1
+ * en ancho y en alto por separado, así que medirla con ellos falsea el ángulo (una
+ * inclinación real de 14° se leía como 9°).
+ */
+function screenRoll(hand, stage) {
+  const lm = hand.landmarks;
+  const pts = [];
+  pts[0] = stage.toScreen(lm[0]);
+  pts[9] = stage.toScreen(lm[9]);
+  return handRoll(pts);
+}
 
 /** Suavizado exponencial independiente de los fotogramas por segundo (tau en ms). */
 const ease = (dt, tau) => 1 - Math.exp(-Math.max(0, dt) / tau);
@@ -60,6 +74,8 @@ export class ChordHandReader {
     this.volume = 0.85;
     this.brightness = 0.6;
     this.stable = null;
+    this.allowOneHand = false; // true: suena aunque no haya mano derecha (p. ej. en el tutorial)
+    this._lastExprT = -Infinity;
   }
 
   /** Reparte las manos: la de los acordes y la de expresión. */
@@ -101,9 +117,9 @@ export class ChordHandReader {
     let chordInfo = null;
     if (chord) {
       const onLeft = chord.landmarks[0].x < 0.5;
-      this.roll += (handRoll(chord.landmarks) - this.roll) * ease(dt, 60);
+      this.roll += (screenRoll(chord, stage) - this.roll) * ease(dt, 60);
       this.tilt = tiltSide(this.roll, onLeft, this.tilt);
-      chordInfo = { pos: stage.toScreen(chord.landmarks[0]), degree: this.degree, tilt: this.tilt, onLeft };
+      chordInfo = { pos: stage.toScreen(chord.landmarks[0]), degree: this.degree, tilt: this.tilt, roll: this.roll, onLeft };
     } else this.tilt = 'recta';
 
     // --- Mano de expresión: variante, volumen y brillo (suavizados) ---
@@ -119,12 +135,19 @@ export class ChordHandReader {
       exprMuted = this.voicingSmooth === 'mudo';
       const pos = stage.toScreen(expr.landmarks[0]);
       targetVol = exprMuted ? 0 : volumeFromHeight(pos.y / hh);
-      targetBright = Math.max(0, Math.min(1, 0.55 + handRoll(expr.landmarks) / 80));
+      targetBright = Math.max(0, Math.min(1, 0.55 + screenRoll(expr, stage) / 80));
       exprInfo = { pos, voicing: exprMuted ? 'triada' : this.voicingSmooth, muted: exprMuted };
     } else {
       this.voiceHist = [];
       this.voicingSmooth = 'triada';
+      // Sin mano derecha se calla (como en Gesture Synth), salvo un instante por si la
+      // cámara la pierde un momento.
+      if (settings.chordNeedRight && !this.allowOneHand) {
+        targetVol = now - this._lastExprT < 150 ? this.volume : 0;
+        exprMuted = now - this._lastExprT >= 150;
+      }
     }
+    if (expr) this._lastExprT = now;
     this.volume += (targetVol - this.volume) * ease(dt, exprMuted ? 40 : 90);
     this.brightness += (targetBright - this.brightness) * ease(dt, 90);
 

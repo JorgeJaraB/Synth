@@ -1,6 +1,7 @@
 // Cámara + detección de manos con MediaPipe (todo local, sin internet).
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { settings } from './settings.js';
+import { cameraStats } from './stats.js';
 
 export const TIP = { thumb: 4, index: 8, middle: 12, ring: 16, pinky: 20 };
 const PIP = { thumb: 3, index: 6, middle: 10, ring: 14, pinky: 18 };
@@ -33,12 +34,15 @@ async function getLandmarker() {
       // Sin WebGL2 (equipos sin aceleración gráfica) usamos directamente la CPU.
       if (!forceCpu && hasWebGL2()) {
         try {
-          return await HandLandmarker.createFromOptions(fileset, opts('GPU'));
+          const lm = await HandLandmarker.createFromOptions(fileset, opts('GPU'));
+          cameraStats.delegate = 'GPU';
+          return lm;
         } catch (e) {
           console.warn('GPU no disponible para MediaPipe, usando CPU', e);
         }
       }
       forceCpu = true;
+      cameraStats.delegate = 'CPU';
       return await HandLandmarker.createFromOptions(fileset, opts('CPU'));
     })();
     landmarkerPromise.catch(() => (landmarkerPromise = null));
@@ -71,17 +75,21 @@ export async function listCameras() {
 const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
 
 /**
- * ¿Está el pulgar fuera? Se mide en 3D (coordenadas "world" de MediaPipe, en metros),
- * que no dependen de cómo se vea la mano en la imagen. Calibrado con fotos reales:
- *   pulgar fuera  → punta/nudillo corazón ≥ 0,79 · punta/meñique ≥ 1,12
- *   pulgar doblado → ≤ 0,52 · ≤ 0,75
+ * ¿Está el pulgar fuera? Se mide en la imagen, respecto a la propia mano (no depende de si
+ * la mano está girada ni de qué mano es): se mira cuánto sale la punta del pulgar por el lado
+ * del índice, en anchos de palma (nudillo del meñique → nudillo del índice).
+ *   pulgar recogido sobre la palma (🤘) → la punta queda entre los nudillos (≤ 0)
+ *   pulgar fuera (🤟, mano abierta)      → la punta sale por el lado del índice (≥ 0,3)
  * Con histéresis (prev) para que no parpadee en la frontera.
  */
-export function thumbOut(world, prev = false) {
-  const size = dist3(world[0], world[9]) || 0.08;
-  const toMiddle = dist3(world[4], world[9]) / size;
-  const toPinky = dist3(world[4], world[17]) / (dist3(world[3], world[17]) || 0.05);
-  return prev ? toMiddle > 0.58 && toPinky > 0.88 : toMiddle > 0.66 && toPinky > 0.98;
+export function thumbOut(lm, prev = false) {
+  const ux = lm[5].x - lm[17].x;
+  const uy = lm[5].y - lm[17].y;
+  const w = Math.hypot(ux, uy) || 0.05;
+  const along = (p) => ((p.x - lm[5].x) * ux + (p.y - lm[5].y) * uy) / (w * w);
+  const tip = along(lm[4]); // > 0: la punta sale por el lado del índice
+  const beyondIp = tip - along(lm[3]); // > 0: la punta está más fuera que la articulación
+  return prev ? tip > 0.18 || (tip > 0.02 && beyondIp > 0.06) : tip > 0.3 || (tip > 0.1 && beyondIp > 0.1);
 }
 
 /**
@@ -99,9 +107,7 @@ export function analyzeHand(lm, world = null, prevThumb = false) {
   for (const f of ['index', 'middle', 'ring', 'pinky']) {
     extended[f] = d(P[0], P[TIP[f]]) > d(P[0], P[PIP[f]]) * 1.12;
   }
-  extended.thumb = world
-    ? thumbOut(world, prevThumb)
-    : dist(lm[TIP.thumb], lm[17]) > dist(lm[PIP.thumb], lm[17]) * 1.2 && dist(lm[TIP.thumb], lm[9]) / size > 0.66;
+  extended.thumb = thumbOut(lm, prevThumb);
   const pinchDist = dist(lm[TIP.thumb], lm[TIP.index]) / size;
   const nExt = ['index', 'middle', 'ring', 'pinky'].filter((f) => extended[f]).length;
   return {
@@ -139,10 +145,11 @@ export class HandTracker {
     if (this.running) return;
     const constraints = {
       video: {
-        // 960×540 basta para detectar bien las manos y deja más imágenes por segundo
-        // en portátiles modestos (reacción más rápida).
-        width: { ideal: 960 },
-        height: { ideal: 540 },
+        // Resolución baja a propósito: muchas webcams de portátil solo dan 30 imágenes por
+        // segundo hasta 640 de ancho (a más resolución bajan a 15) y para detectar las manos
+        // basta. En panorámico, para que no se recorte la imagen en pantalla.
+        width: { ideal: 640 },
+        height: { ideal: 360 },
         frameRate: { ideal: 30 },
         ...(settings.cameraId ? { deviceId: { exact: settings.cameraId } } : { facingMode: 'user' }),
       },
@@ -160,6 +167,9 @@ export class HandTracker {
       } else throw e;
     }
     this.stream = stream;
+    const cam = stream.getVideoTracks()[0]?.getSettings?.() || {};
+    cameraStats.resolution = cam.width ? `${cam.width}×${cam.height}` : '?';
+    cameraStats.cameraFps = cam.frameRate || 0;
     this.video.srcObject = stream;
     await this.video.play();
     this.landmarker = await getLandmarker();
@@ -187,6 +197,7 @@ export class HandTracker {
     let res;
     try {
       res = this.landmarker.detectForVideo(v, now);
+      cameraStats.detectMs = cameraStats.detectMs * 0.9 + (performance.now() - now) * 0.1;
       this._errors = 0;
       this.failed = false;
     } catch (e) {
@@ -204,6 +215,7 @@ export class HandTracker {
       return;
     }
     if (this._lastT) this.fps = this.fps * 0.9 + (1000 / (now - this._lastT)) * 0.1;
+    cameraStats.detectFps = this.fps;
     this._lastT = now;
     this.hands = this._process(res);
     for (const fn of this.listeners) fn(this.hands);

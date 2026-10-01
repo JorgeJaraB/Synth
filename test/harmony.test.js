@@ -37,10 +37,10 @@ test('detectKey usa el relativo mayor de una tonalidad menor', () => {
 
 test('votación y volumen por altura', () => {
   assert.deepEqual(mode([1, 1, 2, 1, 3]), [1, 3]);
-  assert.equal(volumeFromHeight(0.3), 1);
+  assert.equal(volumeFromHeight(0.25), 1);
   assert.equal(volumeFromHeight(0.1), 1);
-  assert.ok(Math.abs(volumeFromHeight(0.8) - 0.2) < 1e-9);
-  assert.ok(volumeFromHeight(0.55) > 0.55 && volumeFromHeight(0.55) < 0.65);
+  assert.ok(Math.abs(volumeFromHeight(0.85) - 0.35) < 1e-9); // lo más bajo se sigue oyendo
+  assert.ok(volumeFromHeight(0.55) > 0.6 && volumeFromHeight(0.55) < 0.75);
 });
 
 test('reacción rápida de los acordes (cámara a 30 fps)', async () => {

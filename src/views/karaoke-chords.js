@@ -12,11 +12,14 @@ import { navigate } from '../router.js';
 import { CameraStage } from '../ui/camera-stage.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { handSvg } from '../ui/hand-svg.js';
+import { drawTiltGauge } from '../ui/tilt-gauge.js';
 import { h } from '../ui/dom.js';
 import { Transport, speedSelect, toggleButton, accompanimentControl, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
 const NOW_X = 0.24;
+// Con el piano de la canción suenan muchas más notas a la vez: se bajan para no saturar.
+const BACKING_GAIN = 0.6;
 
 /** Imágenes de las manos (SVG → imagen) para dibujarlas en el canvas. */
 const handImages = new Map();
@@ -48,7 +51,11 @@ export function mount(root, params) {
     extras: [
       speedSelect(() => player),
       accompanimentControl(),
-      toggleButton('🎹 Piano de la canción', 'kcOriginalBacking', (on) => player && (player.muted = new Set(on ? [] : harmonyTracks))),
+      toggleButton('🎹 Piano de la canción', 'kcOriginalBacking', (on) => {
+        if (!player) return;
+        player.muted = new Set(on ? [] : harmonyTracks);
+        player.accGain = on ? BACKING_GAIN : 1;
+      }),
     ],
   });
   const titleEl = h('h2.song-title', 'Cargando…');
@@ -182,6 +189,7 @@ export function mount(root, params) {
         ctx.textBaseline = 'middle';
         ctx.fillText(romanFor(degree, qualityFor(degree, tilt)), pos.x, pos.y + 45);
         ctx.restore();
+        drawTiltGauge(ctx, pos.x, pos.y + 110, r.chordInfo.roll, r.chordInfo.onLeft, tilt);
       }
     },
     afterDraw() {
@@ -212,7 +220,7 @@ export function mount(root, params) {
     // Por defecto se callan las pistas de acompañamiento (los acordes los pone el alumno);
     // con "Piano de la canción" suenan también, para canciones donde importa más la melodía.
     harmonyTracks = song.tracks.filter((t) => !t.isDrum && t.index !== melodyTrack).map((t) => t.index);
-    player = new SongPlayer(song, { practiceTrack: -1, practice, mode, muted: settings.kcOriginalBacking ? [] : harmonyTracks });
+    player = new SongPlayer(song, { practiceTrack: -1, practice, mode, muted: settings.kcOriginalBacking ? [] : harmonyTracks, accGain: settings.kcOriginalBacking ? BACKING_GAIN : 1 });
     if (import.meta.env.DEV) window.__kc = { player, chords, get reader() { return reader; }, get voice() { return voice; } };
     player.on('end', () => {
       voice?.silence();

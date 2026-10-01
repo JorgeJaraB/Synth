@@ -1,4 +1,5 @@
 // Informe de problemas: guarda los últimos errores y prepara una incidencia (issue) en GitHub.
+import { cameraStatsText } from './stats.js';
 import { settings } from './settings.js';
 import { currentName } from '../router.js';
 
@@ -56,6 +57,7 @@ export function buildReport(description, { technical = true } = {}) {
       `- App de escritorio: ${window.synthAPI ? 'sí' : 'no (navegador)'}`,
       `- Resolución: ${window.screen.width}×${window.screen.height} · ventana ${window.innerWidth}×${window.innerHeight}`,
       `- Ajustes: notas=${s.notation}, volumen=${s.masterVolume}, sintetizador=${s.synthInstrument}/${s.synthPitchMode}/${s.synthTrigger}, acordes=${s.chordInstrument}${s.chordLefty ? ' (zurdo)' : ''}, piano aire=${s.airPianoOctaves} oct. ${s.airPianoMode === 'extender' ? 'extender ' + s.airPianoPosition : 'pulsar ' + s.airPianoSensitivity}`,
+      `- Cámara: ${cameraStatsText()}`,
       '',
       '## Últimos errores',
       errors.length ? '```\n' + errors.map((e) => `[${e.time}] ${e.kind}: ${e.text}`).join('\n') + '\n```' : '_Ninguno registrado._',
