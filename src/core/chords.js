@@ -29,23 +29,25 @@ export function romanFor(degree, quality) {
 }
 
 /**
- * Notas MIDI de un acorde.
- * @param {number} tonic  nota MIDI de la tónica (p. ej. 48 = Do3)
+ * Notas MIDI de un acorde, en posición abierta y en un registro claro (como en Gesture Synth):
+ * la fundamental queda entre Sol3 y Fa#4, y encima van la quinta, la octava y la décima.
+ * @param {number} tonic  nota MIDI de la tónica (solo importa la nota, no la octava)
  * @param {number} degree 1..7
  * @param {'mayor'|'menor'|'dim'} quality
  * @param {keyof VOICINGS} voicing
  */
 export function chordNotes(tonic, degree, quality, voicing = 'triada') {
-  const root = tonic + MAJOR_STEPS[degree - 1];
+  let root = tonic + MAJOR_STEPS[degree - 1];
+  while (root > 66) root -= 12;
+  while (root < 55) root += 12;
   const third = quality === 'mayor' ? 4 : 3;
   const fifth = quality === 'dim' ? 6 : 7;
   let iv;
-  if (voicing === 'inversion') iv = [third, fifth, 12];
+  if (voicing === 'inversion') iv = [third, fifth, 12, 12 + third];
   else if (voicing === 'septima') iv = [0, third, fifth, quality === 'mayor' ? 11 : 10];
   else if (voicing === 'dominante') iv = quality === 'mayor' ? [0, 4, 7, 10] : [0, 3, 6, 9];
-  else iv = [0, third, fifth];
-  // Bajo una octava por debajo para dar cuerpo al acorde.
-  return [root - 12, ...iv.map((i) => root + i)];
+  else iv = [0, fifth, 12, 12 + third];
+  return iv.map((i) => root + i);
 }
 
 /** Nombre corto del acorde: "Do", "Rem", "Si°", "Sol7", "Domaj7", "Rem7", "Si°7". */
@@ -91,13 +93,17 @@ export function handRoll(lm) {
   return (Math.atan2(dx, -dy) * 180) / Math.PI;
 }
 
+/** Grados de inclinación para pasar a mayor / menor, y para volver a recta (histéresis). */
+export const TILT_ENTER = 12;
+export const TILT_EXIT = 6;
+
 /**
  * Hacia dónde está inclinada la mano de los acordes, con histéresis para que no parpadee.
  * "dentro" = hacia el centro de la pantalla, "fuera" = hacia el borde.
  * @param {number} roll  grados (handRoll)
  * @param {boolean} onLeft  la mano está en la mitad izquierda de la pantalla
  */
-export function tiltSide(roll, onLeft, prev = 'recta', enter = 22, exit = 12) {
+export function tiltSide(roll, onLeft, prev = 'recta', enter = TILT_ENTER, exit = TILT_EXIT) {
   const inward = onLeft ? roll : -roll;
   // Para salir de una inclinación basta con volver casi a recta (histéresis),
   // pero se puede pasar directamente de un lado al otro.

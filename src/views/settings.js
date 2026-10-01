@@ -1,4 +1,5 @@
 // Ajustes generales: cámara, notas, sonido, apariencia.
+import { cameraStatsText } from '../core/stats.js';
 import { settings, resetSettings } from '../core/settings.js';
 import { listCameras, tracker } from '../core/hands.js';
 import { isDesktop, songsFolderPath, openSongsFolder } from '../core/library.js';
@@ -12,6 +13,10 @@ export function mount(root) {
   let stage = null;
   const camSel = h('select', { onchange: () => { settings.cameraId = camSel.value; restartPreview(); } }, h('option', { value: '' }, 'Predeterminada'));
   const previewHost = h('div.camera-preview');
+  const camStats = h('p.muted.cam-stats');
+  const statsTimer = setInterval(() => {
+    camStats.textContent = stage ? '📊 ' + cameraStatsText() : '';
+  }, 1000);
   const previewBtn = h('button.btn', { onclick: () => (stage ? stopPreview() : startPreview()) }, '📷 Probar cámara');
 
   function startPreview() {
@@ -71,6 +76,7 @@ export function mount(root) {
         settingToggle('Dibujar las líneas de la mano', 'showSkeleton'),
         h('div.row', previewBtn),
         previewHost,
+        camStats,
         h('p.muted', 'Si la cámara no funciona en Windows: Configuración → Privacidad y seguridad → Cámara → permitir a las aplicaciones de escritorio.'),
       ),
       h('section.card',
@@ -126,6 +132,7 @@ export function mount(root) {
   );
   root.append(view);
   return () => {
+    clearInterval(statsTimer);
     document.removeEventListener('synth-update', onUpd);
     stopPreview();
     tracker.stop();

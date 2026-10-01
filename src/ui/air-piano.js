@@ -96,17 +96,15 @@ export class AirPiano {
         const k = this._unproject(g, p.x, p.y);
         // La punta debe estar sobre el teclado (con algo de margen por arriba y por abajo).
         const over = k.v >= -g.h * 0.15 && k.v <= g.h + g.front + 30;
-        // El teclado está girado: las negras quedan abajo (hacia la pantalla) y el frente de las
-        // blancas arriba (hacia quien toca), así que se busca la tecla con la altura invertida.
-        const m = r?.pressed && over ? keyAt(this.keys, k.u, g.h - Math.max(1, Math.min(k.v, g.h - 1))) : null;
         const cur = this.active.get(id);
+        // Un dedo, una tecla: la tecla se elige al empezar a pulsar y se mantiene hasta que el
+        // dedo sube, aunque se mueva un poco en el aire.
+        let m = null;
+        if (r?.pressed) m = cur ?? (over ? keyAt(this.keys, k.u, Math.max(1, Math.min(k.v, g.h - 1))) : null);
         this.tips.push({ ...p, id, pressed: m != null, amount: r?.amount || 0, visible: over });
         if (m == null) {
           if (cur != null) this._off(id);
-        } else if (m !== cur) {
-          if (cur != null) this._off(id);
-          this._on(id, m, r.velocity);
-        }
+        } else if (cur == null) this._on(id, m, r.velocity);
       }
     }
     for (const id of [...this.active.keys()]) if (!seen.has(id)) this._off(id);
@@ -189,7 +187,7 @@ export class AirPiano {
     }
   }
 
-  /** Teclado en perspectiva, girado hacia quien toca: las negras abajo (hacia la pantalla) y el frente de las blancas arriba. */
+  /** Teclado visto desde el sitio del pianista: más estrecho al fondo y con el canto de las teclas. */
   _drawPerspective(ctx, pressed) {
     const g = this.geo;
     const hints = this.getHints();
@@ -228,10 +226,8 @@ export class AirPiano {
         const dy = p ? (k.black ? 3 : 5) : 0; // la tecla pulsada se hunde
         const u1 = k.x + gap;
         const u2 = k.x + k.w - gap;
-        // Girado: todas las teclas acaban en el borde de abajo; las negras solo cubren la parte baja.
-        const vStart = g.h - k.h;
-        const vEnd = g.h;
-        // Canto de la tecla (borde de abajo)
+        const vEnd = k.h;
+        // Canto frontal de la tecla
         const fa = this._project(g, u1, vEnd);
         const fb = this._project(g, u2, vEnd);
         const fh = (k.black ? g.front * 0.9 : g.front) - dy;
@@ -244,11 +240,11 @@ export class AirPiano {
         ctx.fillStyle = k.black ? '#07080f' : p ? mix('#000000', typeof p === 'string' ? '#888888' : col, 0.7) : '#b9bccb';
         ctx.fill();
         // Superficie de la tecla
-        quad(u1, u2, vStart, vEnd, dy);
+        quad(u1, u2, 0, vEnd, dy);
         if (k.black) {
-          const gr = ctx.createLinearGradient(0, g.top + vStart, 0, g.top + vEnd);
-          gr.addColorStop(0, p ? fill : '#2b2e42');
-          gr.addColorStop(1, fill);
+          const gr = ctx.createLinearGradient(0, g.top, 0, g.top + vEnd);
+          gr.addColorStop(0, fill);
+          gr.addColorStop(1, p ? fill : '#2b2e42');
           ctx.fillStyle = gr;
         } else ctx.fillStyle = fill;
         ctx.fill();
@@ -258,15 +254,15 @@ export class AirPiano {
           ctx.stroke();
         }
         if (hint && !p) {
-          quad(u1 + 3, u2 - 3, vStart + 3, vEnd - 3, dy);
+          quad(u1 + 3, u2 - 3, 3, vEnd - 3, dy);
           ctx.strokeStyle = hint;
           ctx.lineWidth = 3;
           ctx.stroke();
         }
-        // Nombre de la nota, en el frente de la tecla blanca (arriba, hacia quien toca)
+        // Nombre de la nota, cerca del borde del pianista
         if (settings.pianoLabels && !k.black && ww > 22) {
-          const c = this._project(g, k.x + k.w / 2, g.h * 0.16);
-          const scale = 0.85 + 0.15 * 0.16;
+          const c = this._project(g, k.x + k.w / 2, vEnd * 0.84);
+          const scale = 0.85 + 0.15 * (vEnd * 0.84) / g.h;
           const fs = Math.min(20, ww * 0.36) * scale;
           if (notation === 'colores') {
             ctx.fillStyle = col;
@@ -283,7 +279,7 @@ export class AirPiano {
           if (k.midi % 12 === 0 && ww > 30 && !isBlack(k.midi)) {
             ctx.fillStyle = '#9aa0b8';
             ctx.font = `600 ${fs * 0.6}px Nunito, system-ui, sans-serif`;
-            ctx.fillText(String(Math.floor(k.midi / 12) - 1), c.x, c.y + dy + fs * 1.05);
+            ctx.fillText(String(Math.floor(k.midi / 12) - 1), c.x, c.y + dy - fs * 1.05);
           }
         }
       }

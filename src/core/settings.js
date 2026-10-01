@@ -24,7 +24,8 @@ export const DEFAULTS = {
   recordMic: false, // grabar también el micrófono (para el karaoke)
   // Acordes con gestos
   chordKey: 0, // tonalidad: 0 = Do, 2 = Re, 7 = Sol...
-  chordInstrument: 'suave',
+  chordInstrument: 'limpio', // ver CHORD_WAVES e INSTRUMENTS en audio.js
+  chordNeedRight: true, // los acordes se callan al quitar la mano derecha (como en Gesture Synth)
   chordLefty: false, // zurdo/a: la mano derecha elige el acorde
   chordArpeggio: false,
   chordProgression: 'ninguna',
@@ -56,6 +57,11 @@ try {
   if (!saved._v) {
     if (saved.masterVolume === 0.8) state.masterVolume = 1;
     state._v = 2;
+  }
+  // v3: los acordes estrenan sonido limpio (el "Synth suave" sonaba desafinado en acordes).
+  if ((state._v || 0) < 3) {
+    if (state.chordInstrument === 'suave') state.chordInstrument = 'limpio';
+    state._v = 3;
   }
 } catch {
   /* sin almacenamiento: usamos los valores por defecto */

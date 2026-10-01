@@ -7,12 +7,14 @@ import {
 const ext = (s) => ({ thumb: s.includes('p'), index: s.includes('i'), middle: s.includes('m'), ring: s.includes('a'), pinky: s.includes('e') });
 
 test('acordes de Do mayor', () => {
-  assert.deepEqual(chordNotes(60, 1, 'mayor'), [48, 60, 64, 67]); // Do Mi Sol
-  assert.deepEqual(chordNotes(60, 2, 'menor'), [50, 62, 65, 69]); // Re Fa La
-  assert.deepEqual(chordNotes(60, 7, 'dim'), [59, 71, 74, 77]); // Si Re Fa
-  assert.deepEqual(chordNotes(60, 5, 'mayor', 'dominante'), [55, 67, 71, 74, 77]); // Sol7
-  assert.deepEqual(chordNotes(60, 1, 'mayor', 'inversion'), [48, 64, 67, 72]);
-  assert.deepEqual(chordNotes(60, 1, 'mayor', 'septima'), [48, 60, 64, 67, 71]); // Domaj7
+  // Posición abierta: fundamental, quinta, octava y décima (fundamental entre Sol3 y Fa#4)
+  assert.deepEqual(chordNotes(60, 1, 'mayor'), [60, 67, 72, 76]); // Do Sol Do Mi
+  assert.deepEqual(chordNotes(48, 1, 'mayor'), [60, 67, 72, 76]); // la octava de la tónica no importa
+  assert.deepEqual(chordNotes(60, 2, 'menor'), [62, 69, 74, 77]); // Re La Re Fa
+  assert.deepEqual(chordNotes(60, 7, 'dim'), [59, 65, 71, 74]); // Si Fa Si Re
+  assert.deepEqual(chordNotes(60, 5, 'mayor', 'dominante'), [55, 59, 62, 65]); // Sol7
+  assert.deepEqual(chordNotes(60, 1, 'mayor', 'inversion'), [64, 67, 72, 76]);
+  assert.deepEqual(chordNotes(60, 1, 'mayor', 'septima'), [60, 64, 67, 71]); // Domaj7
 });
 
 test('nombres de acordes y números romanos', () => {
@@ -54,8 +56,9 @@ test('inclinación de la mano y calidad', () => {
   assert.equal(tiltSide(-35, true), 'fuera');
   assert.equal(tiltSide(35, false), 'fuera');
   assert.equal(tiltSide(5, true, 'dentro'), 'recta');
-  assert.equal(tiltSide(16, true, 'dentro'), 'dentro'); // histéresis
-  assert.equal(tiltSide(16, true, 'recta'), 'recta');
+  assert.equal(tiltSide(9, true, 'dentro'), 'dentro'); // histéresis
+  assert.equal(tiltSide(9, true, 'recta'), 'recta');
+  assert.equal(tiltSide(-14, true, 'recta'), 'fuera'); // basta con inclinarla un poco
   assert.equal(tiltSide(-35, true, 'dentro'), 'fuera'); // de un lado al otro directamente
   assert.equal(qualityFor(2, 'recta'), 'menor');
   assert.equal(qualityFor(2, 'dentro'), 'mayor');

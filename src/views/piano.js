@@ -182,6 +182,7 @@ export function mount(root, params = {}) {
       const wrap = h('div.stage-wrap');
       body.append(wrap);
       const air = new AirPiano({ onNoteOn: noteOn, onNoteOff: noteOff });
+      if (import.meta.env.DEV) window.__air = air;
       const stage = new CameraStage(wrap, {
         dim: 0.2,
         onDraw(ctx, w, hh, hands, st) {

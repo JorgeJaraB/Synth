@@ -1,6 +1,6 @@
 // Acordes con gestos: una mano forma el acorde con los dedos (como en lengua de signos)
 // y la otra controla cómo suena. Idea inspirada en "Gesture Synth" de Eric Wei.
-import { audio, INSTRUMENTS } from '../core/audio.js';
+import { audio, INSTRUMENTS, CHORD_WAVES } from '../core/audio.js';
 import { settings, onSettingsChange } from '../core/settings.js';
 import { noteColor, noteName, SOLFEGE, LETTERS } from '../core/notes.js';
 import {
@@ -13,6 +13,7 @@ import { h, settingSelect, settingRange, settingToggle, panelToggle, INSTRUMENT_
 import { drawWave } from './synth.js';
 import { ChordTutorial } from './chords-tutorial.js';
 import { handSvg } from '../ui/hand-svg.js';
+import { drawTiltGauge } from '../ui/tilt-gauge.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
 const SIGN_TEXT = ['1 dedo', '2 dedos', '3 dedos', '4 dedos', 'mano abierta', 'índice + meñique', 'índice + meñique + pulgar'];
@@ -86,7 +87,8 @@ export function mount(root) {
     h('h2', '🤟 Acordes con gestos'),
     h('button.btn.primary.tut-btn', { onclick: () => startTutorial() }, '🎓 Tutorial paso a paso'),
     settingSelect('Tonalidad', 'chordKey', SOLFEGE.map((s, i) => [i, `${s} mayor (${LETTERS[i]})`]), onChange),
-    settingSelect('Sonido', 'chordInstrument', INSTRUMENT_OPTIONS(INSTRUMENTS), () => rebuildVoice()),
+    settingSelect('Sonido', 'chordInstrument', [...INSTRUMENT_OPTIONS(CHORD_WAVES), ...INSTRUMENT_OPTIONS(INSTRUMENTS)], () => rebuildVoice()),
+    settingToggle('Callar al quitar la mano derecha', 'chordNeedRight'),
     settingToggle('Arpegiar (tocar las notas una a una)', 'chordArpeggio', (v) => voice?.setArpeggio(v)),
     settingToggle('Soy zurdo/a (la mano derecha forma el acorde)', 'chordLefty'),
     settingSelect('Progresión para practicar', 'chordProgression', Object.entries(PROGRESSIONS).map(([k, v]) => [k, v.name]), renderProgression),
@@ -175,9 +177,10 @@ export function mount(root) {
   }
 
   const stage = new CameraStage(stageWrap, {
-    dim: 0.4,
+    dim: 0.22,
     onDraw(ctx, w, hh, hands, st) {
       const now = performance.now();
+      reader.allowOneHand = !!tutorial; // en el tutorial hay pasos solo con la mano izquierda
       const r = reader.update(hands, st, hh, now);
       const stable = r.stable;
       volume = r.volume;
@@ -247,14 +250,9 @@ export function mount(root) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(label, x, y + 1);
-        // Flecha de inclinación
-        if (ok && tl !== 'recta') {
-          const dir = (tl === 'dentro') === onLeft ? 1 : -1;
-          ctx.font = '800 15px Nunito, system-ui, sans-serif';
-          ctx.fillText(tl === 'dentro' ? 'mayor' : 'menor', x + dir * 70, y);
-          ctx.fillText(dir > 0 ? '➜' : '⬅', x + dir * 44, y - 20);
-        }
         ctx.restore();
+        // Barra de inclinación: dónde está la mano y cuánto falta para mayor / menor
+        if (ok) drawTiltGauge(ctx, x, y + 70, chordHandInfo.roll, onLeft, tl);
       }
       if (exprHandInfo) {
         const { pos, voicing, muted } = exprHandInfo;

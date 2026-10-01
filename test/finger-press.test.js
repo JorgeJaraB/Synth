@@ -30,7 +30,7 @@ function run(fp, frames) {
   return r;
 }
 
-test('bajar un dedo más que los demás lo pulsa, y subirlo lo suelta', () => {
+test('bajar un dedo lo pulsa, y subirlo lo suelta', () => {
   const fp = new FingerPress();
   run(fp, Array(10).fill(hand()));
   // Palma = 115 px; bajar 25 px ≈ 0,22 palmas
@@ -42,18 +42,32 @@ test('bajar un dedo más que los demás lo pulsa, y subirlo lo suelta', () => {
   assert.equal(r.get('R:middle').pressed, false);
 });
 
-test('mover o inclinar toda la mano no pulsa nada', () => {
+test('mover toda la mano no pulsa nada', () => {
   const fp = new FingerPress();
   run(fp, Array(10).fill(hand()));
-  const moved = [];
-  for (let i = 0; i < 20; i++) moved.push(hand({}, { x: i * 6, y: i * 8 }));
-  // Todas las puntas bajan a la vez (la mano se inclina hacia delante)
-  for (let i = 0; i < 10; i++) moved.push(hand({ index: i * 4, middle: i * 4, ring: i * 4, pinky: i * 4 }));
   const fired = new Set();
-  moved.forEach((h, i) => {
-    for (const [id, s] of fp.update([h], (fp._t += 1 / 30))) if (s.pressed) fired.add(id);
-  });
-  assert.deepEqual([...fired].filter((id) => id !== 'R:thumb'), []);
+  for (let i = 0; i < 30; i++) {
+    for (const [id, st] of fp.update([hand({}, { x: i * 6, y: i * 8 })], (fp._t += 1 / 30))) if (st.pressed) fired.add(id);
+  }
+  assert.deepEqual([...fired], []);
+});
+
+test('cada dedo va por su cuenta: un dedo más bajo de lo normal no suena', () => {
+  const fp = new FingerPress();
+  // La mano no está plana: el anular descansa bastante más abajo que los demás.
+  run(fp, Array(40).fill(hand({ ring: 22 })));
+  let r = run(fp, [hand({ ring: 22 })]);
+  assert.equal(r.get('R:ring').pressed, false);
+  // Bajarlo desde su propio reposo sí pulsa, aunque los otros dedos no se muevan.
+  r = run(fp, [hand({ ring: 36 }), hand({ ring: 48 })]);
+  assert.equal(r.get('R:ring').pressed, true);
+  assert.equal(r.get('R:index').pressed, false);
+  // Dos dedos a la vez también suenan (antes uno "tapaba" al otro).
+  const fp2 = new FingerPress();
+  run(fp2, Array(10).fill(hand()));
+  r = run(fp2, [hand({ index: 14, middle: 14 }), hand({ index: 28, middle: 28 })]);
+  assert.equal(r.get('R:index').pressed, true);
+  assert.equal(r.get('R:middle').pressed, true);
 });
 
 test('un movimiento pequeño no suena; el anillo muestra cuánto falta', () => {

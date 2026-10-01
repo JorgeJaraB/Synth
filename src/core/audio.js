@@ -64,6 +64,17 @@ export const INSTRUMENTS = {
   },
 };
 
+/**
+ * Sonidos de los modos de acordes que se tocan con osciladores puros que se deslizan de un
+ * acorde al siguiente (como en Gesture Synth): suenan limpios, afinados y sin cortes.
+ */
+export const CHORD_WAVES = {
+  limpio: { name: 'Synth limpio (como Gesture Synth)', emoji: '✨', wave: 'triangle', level: 0.24 },
+  puro: { name: 'Onda pura (muy suave)', emoji: '🌊', wave: 'sine', level: 0.27 },
+  brillante: { name: 'Sierra brillante', emoji: '⚡', wave: 'sawtooth', level: 0.12 },
+  cuadrada: { name: 'Cuadrada retro', emoji: '👾', wave: 'square', level: 0.1 },
+};
+
 class AudioEngine {
   constructor() {
     this.ready = false;
@@ -74,11 +85,16 @@ class AudioEngine {
   /** Debe llamarse tras un gesto del usuario (clic/toque). */
   async init() {
     if (this.ready) return;
+    // Un poco más de margen de audio: con la cámara y el detector de manos el ordenador va
+    // muy cargado y, con el mínimo, el sonido puede llegar a cortarse ("petardear").
+    Tone.setContext(new Tone.Context({ latencyHint: 'balanced', lookAhead: 0.02 }));
     await Tone.start();
-    Tone.getContext().lookAhead = 0.02;
 
     this.master = new Tone.Volume(Tone.gainToDb(settings.masterVolume));
-    this.limiter = new Tone.Limiter(-1);
+    this.limiter = new Tone.Limiter(-3);
+    // Recorte suave al final: si aun así algo pasa del máximo, se redondea en vez de
+    // chasquear contra el límite.
+    this.softClip = new Tone.WaveShaper((x) => Math.tanh(x * 1.05) / Math.tanh(1.05), 2048);
     this.reverb = new Tone.Reverb({ decay: 2.8, preDelay: 0.02, wet: settings.reverb });
     this.delay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.3, wet: settings.delay });
     this.analyser = new Tone.Waveform(1024);
@@ -88,7 +104,7 @@ class AudioEngine {
     // acordes, que antes apenas se oían) sin saturar; el limitador evita picos.
     this.compressor = new Tone.Compressor({ threshold: -22, ratio: 3.5, attack: 0.005, release: 0.25, knee: 8 });
     this.makeup = new Tone.Gain(Tone.dbToGain(MAKEUP_DB));
-    this.bus.chain(this.delay, this.reverb, this.compressor, this.makeup, this.master, this.limiter, Tone.getDestination());
+    this.bus.chain(this.delay, this.reverb, this.compressor, this.makeup, this.master, this.limiter, this.softClip, Tone.getDestination());
     this.limiter.connect(this.analyser);
     this.limiter.connect(this.meter);
 
@@ -253,7 +269,8 @@ class AudioEngine {
   }
 
   /** Voz de acordes para el modo "Acordes con gestos". */
-  createChordVoice(instrument = 'suave') {
+  createChordVoice(instrument = 'limpio') {
+    if (CHORD_WAVES[instrument]) return new GlideChordVoice(this, CHORD_WAVES[instrument]);
     return new ChordVoice(this, instrument);
   }
 
@@ -448,6 +465,114 @@ class ChordVoice {
       this.filter.dispose();
       this.out.dispose();
     }, 1500);
+  }
+}
+
+/**
+ * Acorde con osciladores fijos que cambian de nota deslizándose (sin volver a atacar las notas).
+ * Mismo uso que ChordVoice. El arpegio usa un sintetizador aparte con la misma onda.
+ */
+class GlideChordVoice {
+  constructor(engine, def) {
+    this.out = new Tone.Gain(0).connect(engine.bus);
+    this.filter = new Tone.Filter({ frequency: 1200, type: 'lowpass', rolloff: -12, Q: 0.7 }).connect(this.out);
+    this.level = def.level;
+    this.voices = Array.from({ length: 4 }, () => {
+      const g = new Tone.Gain(0).connect(this.filter);
+      const o = new Tone.Oscillator({ type: def.wave, frequency: 220 }).connect(g);
+      return { o, g, on: false };
+    });
+    this.started = false;
+    this.synth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: def.wave },
+      envelope: { attack: 0.005, decay: 0.25, sustain: 0.25, release: 0.5 },
+    }).connect(this.filter);
+    this.synth.volume.value = Tone.gainToDb(this.level * 2.5);
+    this.notes = [];
+    this.key = '';
+    this.arpeggio = false;
+    this.arpIndex = 0;
+    this.nextArp = 0;
+    this.bpm = 110;
+  }
+
+  setChord(notes) {
+    const next = notes || [];
+    const key = next.join(',');
+    if (this.arpeggio) {
+      this.notes = next;
+      this.key = key;
+      return;
+    }
+    if (key === this.key) return;
+    if (!this.started) {
+      this.voices.forEach((v) => v.o.start());
+      this.started = true;
+    }
+    const now = Tone.now();
+    this.voices.forEach((v, i) => {
+      if (i < next.length) {
+        const f = Tone.Frequency(next[i], 'midi').toFrequency();
+        // Si la voz estaba callada, empieza directamente en su nota; si no, se desliza.
+        if (v.on) v.o.frequency.rampTo(f, 0.035, now);
+        else v.o.frequency.setValueAtTime(f, now);
+        v.g.gain.rampTo(this.level, 0.03, now);
+        v.on = true;
+      } else if (v.on) {
+        v.g.gain.rampTo(0, 0.05, now);
+        v.on = false;
+      }
+    });
+    this.notes = next;
+    this.key = key;
+  }
+
+  setArpeggio(on) {
+    if (on === this.arpeggio) return;
+    const keep = this.notes;
+    this.silence();
+    this.arpeggio = on;
+    if (on) this.notes = keep;
+    else this.setChord(keep);
+  }
+
+  tick() {
+    ChordVoice.prototype.tick.call(this);
+  }
+
+  setVolume(v) {
+    this.out.gain.rampTo(Math.max(0, Math.min(1, v)), 0.05);
+  }
+
+  setBrightness(b) {
+    const x = Math.max(0, Math.min(1, b));
+    this.filter.frequency.rampTo(300 * Math.pow(16, x), 0.04);
+    this.filter.Q.rampTo(0.7 + 1.5 * x, 0.04);
+  }
+
+  silence() {
+    this.voices.forEach((v) => {
+      if (v.on) v.g.gain.rampTo(0, 0.06);
+      v.on = false;
+    });
+    this.synth.releaseAll();
+    this.notes = [];
+    this.key = '';
+  }
+
+  dispose() {
+    this.silence();
+    this.out.gain.rampTo(0, 0.2);
+    setTimeout(() => {
+      this.voices.forEach((v) => {
+        if (this.started) v.o.stop();
+        v.o.dispose();
+        v.g.dispose();
+      });
+      this.synth.dispose();
+      this.filter.dispose();
+      this.out.dispose();
+    }, 600);
   }
 }
 

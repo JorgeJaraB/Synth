@@ -22,6 +22,7 @@ export class SongPlayer {
     this.mode = opts.mode || 'escuchar';
     this.instrument = opts.instrument || settings.pianoInstrument;
     this.muted = new Set(opts.muted || []);
+    this.accGain = opts.accGain ?? 1; // escala el volumen del acompañamiento (p. ej. con muchas pistas)
     this.speed = settings.tutorialSpeed;
     this.time = opts.startAt ?? -1.5; // pequeña cuenta atrás antes de empezar
     this.playing = false;
@@ -198,7 +199,7 @@ export class SongPlayer {
           const dur = n.duration / this.speed;
           if (tr.isDrum) audio.playDrum(n.midi, toAudio(n.time), n.velocity * 0.8);
           else if (isPractice) audio.playNote(n.midi, dur, toAudio(n.time), n.velocity, this.instrument, 'main');
-          else audio.playNote(n.midi, dur, toAudio(n.time), n.velocity * 0.8, 'piano', 'acc');
+          else audio.playNote(n.midi, dur, toAudio(n.time), n.velocity * 0.8 * this.accGain, 'piano', 'acc');
         }
         i++;
       }
