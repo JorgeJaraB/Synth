@@ -38,6 +38,14 @@ export function accompanimentControl() {
   return h('div.acc-control', btn, h('label.acc-volume', { title: 'Volumen del acompañamiento' }, '🔉', range, out));
 }
 
+/** Botón para enseñar u ocultar la letra (para que no tape la pantalla). */
+export function lyricsToggle(getHost) {
+  return toggleButton('📝 Letra', 'showLyrics', (on) => {
+    const el = getHost();
+    if (el) el.hidden = !on;
+  });
+}
+
 export class Transport {
   constructor(getPlayer, { onRestart, extras = [] } = {}) {
     this.getPlayer = getPlayer;

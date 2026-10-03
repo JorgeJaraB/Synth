@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('synthAPI', {
   readSong: (name) => ipcRenderer.invoke('songs:read', name),
   saveSong: (name, bytes, category) => ipcRenderer.invoke('songs:save', name, bytes, category),
   trashSong: (name) => ipcRenderer.invoke('songs:trash', name),
+  renameSong: (name, newBase) => ipcRenderer.invoke('songs:rename', name, newBase),
   onSongsChanged: (fn) => {
     const listener = () => fn();
     ipcRenderer.on('songs:changed', listener);

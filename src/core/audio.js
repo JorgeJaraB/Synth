@@ -75,6 +75,21 @@ export const CHORD_WAVES = {
   cuadrada: { name: 'Cuadrada retro', emoji: '👾', wave: 'square', level: 0.1 },
 };
 
+/**
+ * Lleva un parámetro a un valor de forma suave (curva exponencial, sin esquinas) y solo si
+ * cambia lo bastante. Los controles de las manos se actualizan ~30 veces por segundo con
+ * pequeños temblores: rehacer la rampa cada vez producía un raspado que sonaba a saturación.
+ * @param state  objeto donde se guarda el último valor (key)
+ * @param gate   valor con el que se decide si ha cambiado lo bastante (p. ej. el brillo 0..1)
+ */
+function easeParam(state, key, param, value, { gate = value, minDelta = 0.01, tc = 0.04 } = {}) {
+  if (state[key] != null && Math.abs(gate - state[key]) < minDelta) return;
+  state[key] = gate;
+  const now = Tone.now();
+  param.cancelAndHoldAtTime(now);
+  param.setTargetAtTime(value, now, tc);
+}
+
 class AudioEngine {
   constructor() {
     this.ready = false;
@@ -102,7 +117,8 @@ class AudioEngine {
     this.bus = new Tone.Gain(1);
     // Compresor + ganancia de compensación: sube el volumen percibido (sobre todo de los
     // acordes, que antes apenas se oían) sin saturar; el limitador evita picos.
-    this.compressor = new Tone.Compressor({ threshold: -22, ratio: 3.5, attack: 0.005, release: 0.25, knee: 8 });
+    // Ataque no demasiado rápido: con 5 ms deformaba los graves del piano (sonaba saturado).
+    this.compressor = new Tone.Compressor({ threshold: -22, ratio: 3, attack: 0.02, release: 0.3, knee: 10 });
     this.makeup = new Tone.Gain(Tone.dbToGain(MAKEUP_DB));
     this.bus.chain(this.delay, this.reverb, this.compressor, this.makeup, this.master, this.limiter, this.softClip, Tone.getDestination());
     this.limiter.connect(this.analyser);
@@ -336,14 +352,14 @@ class ContinuousVoice {
 
   setGain(g) {
     this.gainTarget = g;
-    if (this.active && this.out) this.out.gain.rampTo(g * 0.9, 0.05);
+    if (this.active && this.out) easeParam(this, '_g', this.out.gain, g * 0.9, { minDelta: 0.01, tc: 0.02 });
   }
 
   setBrightness(b) {
     // b en [0,1] → frecuencia de corte del filtro
     if (!this.filter) return;
     const f = 300 * Math.pow(40, b);
-    this.filter.frequency.rampTo(f, 0.05);
+    easeParam(this, '_b', this.filter.frequency, f, { gate: b, minDelta: 0.015, tc: 0.03 });
   }
 
   start() {
@@ -444,11 +460,12 @@ class ChordVoice {
   }
 
   setVolume(v) {
-    this.out.gain.rampTo(Math.max(0, Math.min(1, v)), 0.12);
+    easeParam(this, '_v', this.out.gain, Math.max(0, Math.min(1, v)), { minDelta: 0.01, tc: 0.05 });
   }
 
   setBrightness(b) {
-    this.filter.frequency.rampTo(250 * Math.pow(48, Math.max(0, Math.min(1, b))), 0.08);
+    const x = Math.max(0, Math.min(1, b));
+    easeParam(this, '_b', this.filter.frequency, 250 * Math.pow(48, x), { gate: x, minDelta: 0.015, tc: 0.04 });
   }
 
   silence() {
@@ -541,13 +558,14 @@ class GlideChordVoice {
   }
 
   setVolume(v) {
-    this.out.gain.rampTo(Math.max(0, Math.min(1, v)), 0.05);
+    easeParam(this, '_v', this.out.gain, Math.max(0, Math.min(1, v)), { minDelta: 0.01, tc: 0.025 });
   }
 
   setBrightness(b) {
     const x = Math.max(0, Math.min(1, b));
-    this.filter.frequency.rampTo(300 * Math.pow(16, x), 0.04);
-    this.filter.Q.rampTo(0.7 + 1.5 * x, 0.04);
+    easeParam(this, '_b', this.filter.frequency, 300 * Math.pow(16, x), { gate: x, minDelta: 0.015, tc: 0.03 });
+    // Poca resonancia: con más, los cambios de brillo "silbaban"
+    easeParam(this, '_q', this.filter.Q, 0.7 + 0.6 * x, { gate: x, minDelta: 0.05, tc: 0.05 });
   }
 
   silence() {

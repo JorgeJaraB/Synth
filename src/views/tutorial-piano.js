@@ -11,7 +11,7 @@ import { AirPiano } from '../ui/air-piano.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { drawFalling, activeNotes, upcomingNotes } from '../ui/falling.js';
 import { h, segmented, fitCanvas } from '../ui/dom.js';
-import { Transport, speedSelect, toggleButton, accompanimentControl, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
+import { Transport, speedSelect, toggleButton, accompanimentControl, lyricsToggle, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 
 /** Rango de teclado que abarca la canción, empezando y acabando en Do. */
 export function rangeFor(notes, minOctaves = 2) {
@@ -42,7 +42,7 @@ export function mount(root, params) {
   const body = h('div.tutorial-body');
   const score = scoreBox();
   const transport = new Transport(() => player, {
-    extras: [speedSelect(() => player), accompanimentControl(), toggleButton('🥁 Metrónomo', 'metronome')],
+    extras: [speedSelect(() => player), accompanimentControl(), lyricsToggle(() => lyricsHost), toggleButton('🥁 Metrónomo', 'metronome')],
   });
   const titleEl = h('h2.song-title', 'Cargando…');
   const toolbar = h(
@@ -55,6 +55,7 @@ export function mount(root, params) {
     score.el,
   );
   const lyricsHost = h('div.lyrics-host');
+  lyricsHost.hidden = !settings.showLyrics;
   const view = h('div.view.tutorial', toolbar, lyricsHost, body, transport.el);
   root.append(view);
   let lyrics = null;

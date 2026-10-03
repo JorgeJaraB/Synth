@@ -204,6 +204,27 @@ function registerIpc() {
     await fs.promises.writeFile(full, Buffer.from(bytes));
     return rel;
   });
+  // Cambiar el nombre de una canción (se queda en su carpeta y conserva la extensión).
+  ipcMain.handle('songs:rename', async (_e, name, newBase) => {
+    const from = safeSongPath(name);
+    const ext = path.extname(from);
+    const base = cleanName(path.basename(String(newBase))).replace(/\.(mid|midi|kar|musicxml|mxl|xml)$/i, '').slice(0, 80);
+    if (!base) throw new Error('Nombre vacío');
+    const dir = path.dirname(String(name).replace(/\\/g, '/'));
+    const rel = (dir && dir !== '.' ? dir + '/' : '') + base + ext;
+    const to = safeSongPath(rel);
+    if (to === from) return rel;
+    if (to.toLowerCase() === from.toLowerCase()) {
+      // Solo cambian mayúsculas/minúsculas (Windows no distingue): se pasa por un nombre temporal
+      const tmp = from + '.renombrando';
+      await fs.promises.rename(from, tmp);
+      await fs.promises.rename(tmp, to);
+      return rel;
+    }
+    if (fs.existsSync(to)) throw new Error('Ya existe');
+    await fs.promises.rename(from, to);
+    return rel;
+  });
   ipcMain.handle('songs:trash', async (_e, name) => {
     await shell.trashItem(safeSongPath(name));
     return true;

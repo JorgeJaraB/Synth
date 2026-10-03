@@ -16,10 +16,37 @@ export function decodeMidiText(str) {
   }
 }
 
+/** Marcas "key:G" y "chord:Cm" que guarda la app al importar canciones de acordes. */
+function extractMarks(raw, ticksToSeconds) {
+  const chordMarks = [];
+  let keyMark = null;
+  raw.tracks.forEach((track) => {
+    let tick = 0;
+    for (const ev of track) {
+      tick += ev.deltaTime;
+      if (ev.type !== 'marker') continue;
+      const text = decodeMidiText(ev.text || '').trim();
+      if (text.startsWith('key:')) keyMark = text.slice(4);
+      else if (text.startsWith('chord:')) chordMarks.push({ time: ticksToSeconds(tick), name: text.slice(6) });
+    }
+  });
+  chordMarks.sort((a, b) => a.time - b.time);
+  return { chordMarks, keyMark };
+}
+
+/** Mínimo de sílabas para considerar que un archivo trae letra de verdad. */
+const MIN_SYLLABLES = 8;
+
 function extractLyrics(raw, ticksToSeconds) {
   const lyricEv = [];
   const textEv = [];
   let title = '';
+  // Textos que no son letra: nombres de pistas, título… (muchos MIDI los repiten como texto)
+  const noise = new Set();
+  const norm = (t) => t.trim().toLowerCase();
+  raw.tracks.forEach((track) => {
+    for (const ev of track) if (ev.type === 'trackName' && ev.text) noise.add(norm(decodeMidiText(ev.text)));
+  });
   raw.tracks.forEach((track) => {
     let tick = 0;
     for (const ev of track) {
@@ -35,8 +62,14 @@ function extractLyrics(raw, ticksToSeconds) {
   });
   // Preferimos los eventos de "letra"; muchos .kar usan eventos de texto.
   let src = lyricEv.filter((e) => e.text.trim()).length >= 4 ? lyricEv : textEv;
-  // Descartar textos largos al inicio (créditos) que no son sílabas.
-  src = src.filter((e) => !(e.tick === 0 && e.text.length > 30));
+  // Descartar textos largos al inicio (créditos) y textos que repiten el título o el nombre
+  // de una pista: no son sílabas.
+  if (title) noise.add(norm(title));
+  src = src.filter((e) => !(e.tick === 0 && e.text.length > 30) && !noise.has(norm(e.text.replace(/^[\\/]/, ''))));
+  // Unos pocos textos sueltos (título, autor, "Sequenced by…") no son una letra.
+  const syllableCount = src.filter((e) => e.text.replace(/[\r\n\\/]/g, '').trim()).length;
+  const distinctTicks = new Set(src.map((e) => e.tick)).size;
+  if (syllableCount < MIN_SYLLABLES || distinctTicks < MIN_SYLLABLES) src = [];
   src.sort((a, b) => a.tick - b.tick);
 
   const lines = [];
@@ -160,6 +193,7 @@ export function parseSong(data, fileName = 'Canción') {
   const raw = parseMidi(bytes);
   const t2s = (tick) => midi.header.ticksToSeconds(tick);
   const { lines, title: karTitle } = extractLyrics(raw, t2s);
+  const { chordMarks, keyMark } = extractMarks(raw, t2s);
 
   const tracks = [];
   midi.tracks.forEach((tr) => {
@@ -216,5 +250,7 @@ export function parseSong(data, fileName = 'Canción') {
     lines,
     hasLyrics: lines.length > 0,
     beats,
+    chordMarks, // acordes exactos guardados en el archivo (canciones importadas de acordes)
+    keyMark,
   };
 }

@@ -115,7 +115,7 @@ export function parseSongText({ notesText = '', lyricsText = '', chordsText = ''
 }
 
 /** Genera los bytes de un archivo .kar (MIDI con letra). */
-export function buildKar({ title, bpm = 100, beatsPerBar = 4, notes, syllables = [], chords = [] }) {
+export function buildKar({ title, bpm = 100, beatsPerBar = 4, notes, syllables = [], chords = [], marks = [] }) {
   const TPB = 480;
   const tick = (beats) => Math.round(beats * TPB);
   const toTrack = (evs) => {
@@ -142,6 +142,8 @@ export function buildKar({ title, bpm = 100, beatsPerBar = 4, notes, syllables =
       { t: 0, e: { meta: true, type: 'trackName', text: latin1(title) } },
       { t: 0, e: { meta: true, type: 'setTempo', microsecondsPerBeat: Math.round(60000000 / bpm) } },
       { t: 0, e: { meta: true, type: 'timeSignature', numerator: beatsPerBar, denominator: 4, metronome: 24, thirtyseconds: 8 } },
+      // Marcas con la tonalidad y los acordes exactos ("key:G", "chord:Cm"), si se conocen.
+      ...marks.map((m) => ({ t: tick(m.beat), e: { meta: true, type: 'marker', text: latin1(m.text) } })),
     ]),
     toTrack([{ t: 0, e: { meta: true, type: 'trackName', text: 'Melodia' } }, ...noteEvs(melody, 0, 100)]),
   ];

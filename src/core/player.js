@@ -22,6 +22,7 @@ export class SongPlayer {
     this.mode = opts.mode || 'escuchar';
     this.instrument = opts.instrument || settings.pianoInstrument;
     this.muted = new Set(opts.muted || []);
+    this.allTracks = !!opts.allTracks; // que suene todo (escucha previa), aunque el acompañamiento esté apagado
     this.accGain = opts.accGain ?? 1; // escala el volumen del acompañamiento (p. ej. con muchas pistas)
     this.speed = settings.tutorialSpeed;
     this.time = opts.startAt ?? -1.5; // pequeña cuenta atrás antes de empezar
@@ -216,7 +217,7 @@ export class SongPlayer {
 
     this.song.tracks.forEach((tr, ti) => {
       const isPractice = ti === this.practiceTrack;
-      let audible = isPractice ? this.mode === 'escuchar' : settings.accompaniment;
+      let audible = isPractice ? this.mode === 'escuchar' : this.allTracks || settings.accompaniment;
       // Pistas silenciadas mientras el alumno las toca él (p. ej. los acordes en el karaoke de acordes).
       if (this.muted.has(ti) && this.mode !== 'escuchar') audible = false;
       const notes = tr.notes;

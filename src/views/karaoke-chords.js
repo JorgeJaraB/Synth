@@ -14,7 +14,7 @@ import { LyricsView } from '../ui/lyrics.js';
 import { handSvg } from '../ui/hand-svg.js';
 import { drawTiltGauge } from '../ui/tilt-gauge.js';
 import { h } from '../ui/dom.js';
-import { Transport, speedSelect, toggleButton, accompanimentControl, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
+import { Transport, speedSelect, toggleButton, accompanimentControl, lyricsToggle, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
 const QUALITY_CODE = { mayor: 0, menor: 1, dim: 2 };
@@ -77,6 +77,7 @@ export function mount(root, params) {
     extras: [
       speedSelect(() => player),
       accompanimentControl(),
+      lyricsToggle(() => lyricsHost),
       toggleButton('🎹 Piano de la canción', 'kcOriginalBacking', (on) => {
         if (!player) return;
         player.muted = new Set(on ? [] : harmonyTracks);
@@ -101,6 +102,7 @@ export function mount(root, params) {
   );
   const nowCard = h('div.kc-now');
   const lyricsHost = h('div.kc-lyrics');
+  lyricsHost.hidden = !settings.showLyrics;
   const stageWrap = h('div.stage-wrap', nowCard, lyricsHost);
   const view = h('div.view.tutorial', toolbar, h('div.tutorial-body', stageWrap), transport.el);
   root.append(view);

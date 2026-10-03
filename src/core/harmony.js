@@ -80,6 +80,33 @@ function bestDegree(w, tonic) {
   return best.degree;
 }
 
+const PCS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+/** "F#m" → { root: 6, quality: 'menor' } */
+function markChord(name) {
+  const m = name.match(/^([A-G])(#|b)?(m|dim)?$/);
+  if (!m) return null;
+  const root = (PCS[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) + 12) % 12;
+  return { root, quality: m[3] === 'm' ? 'menor' : m[3] === 'dim' ? 'dim' : 'mayor' };
+}
+
+/**
+ * Canciones importadas de una hoja de acordes: los acordes vienen guardados tal cual.
+ * Los que no son de la tonalidad (no se pueden hacer con los gestos) se saltan.
+ */
+function timelineFromMarks(song, opts) {
+  const marks = song.chordMarks.map((m) => ({ time: m.time, ...markChord(m.name) })).filter((m) => m.root != null);
+  const key = song.keyMark ? markChord(song.keyMark)?.root : null;
+  const tonic = opts.tonic ?? key ?? marks[0]?.root ?? 0;
+  const STEPS = [0, 2, 4, 5, 7, 9, 11];
+  const chords = [];
+  marks.forEach((m, i) => {
+    const end = marks[i + 1]?.time ?? song.duration;
+    const degree = STEPS.indexOf((m.root - tonic + 12) % 12) + 1;
+    if (degree >= 1 && end > m.time) chords.push({ time: m.time, duration: end - m.time, degree, quality: m.quality });
+  });
+  return { tonic, chords };
+}
+
 /**
  * Acordes de la canción: [{ time, duration, degree, quality }].
  * Se analiza pulso a pulso y se fusionan pulsos iguales; los acordes de 1 solo pulso
@@ -88,6 +115,7 @@ function bestDegree(w, tonic) {
  * @param {object} opts  { melodyTrack, tonic } (tónica mayor 0..11; si no, se detecta)
  */
 export function chordTimeline(song, opts = {}) {
+  if (song.chordMarks?.length) return timelineFromMarks(song, opts);
   const melodyIdx = opts.melodyTrack ?? song.melodyTrack;
   const pitched = song.tracks.filter((t) => !t.isDrum);
   const harmony = pitched.filter((t) => t.index !== melodyIdx).flatMap((t) => t.notes);
