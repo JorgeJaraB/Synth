@@ -1,15 +1,19 @@
 // Crear canción: el maestro escribe las notas y la letra, la escucha y la guarda en la biblioteca.
 import { audio } from '../core/audio.js';
 import { settings } from '../core/settings.js';
-import { importFiles } from '../core/library.js';
+import { importFiles, parseAny } from '../core/library.js';
+import { songToText, noteToken } from '../core/song-import.js';
+import { TouchKeyboard } from '../ui/keyboard.js';
 import { parseSongText, buildKar, EXAMPLE_SONG } from '../core/song-text.js';
 import { noteColor, noteName } from '../core/notes.js';
 import { navigate } from '../router.js';
-import { h, toast } from '../ui/dom.js';
+import { h, toast, segmented } from '../ui/dom.js';
+import { chordSheetPanel } from './chord-sheet-editor.js';
 
 const DRAFT_KEY = 'synth-manos-borrador-cancion';
+let lastTab = 'notas';
 
-export function mount(root) {
+export function mount(root, params = {}) {
   let draft = {};
   try {
     draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
@@ -43,17 +47,105 @@ export function mount(root) {
     ),
   );
 
+  // ---------- Teclado para probar y añadir notas ----------
+  const durSel = h('select.compact', { title: 'Duración de la nota que se añade' },
+    [['', '1 pulso'], ['-', '2 pulsos'], ['--', '3 pulsos'], ['---', '4 pulsos'], ['/', 'medio pulso'], ['//', '¼ de pulso'], ['/-', 'pulso y medio']].map(([v, t]) => h('option', { value: v }, t)));
+  const addTok = (tok) => {
+    const v = notesTa.value;
+    notesTa.value = v + (v && !/\s$/.test(v) ? ' ' : '') + tok;
+    notesTa.scrollTop = notesTa.scrollHeight;
+    refresh();
+  };
+  const padCanvas = h('canvas.editor-kb');
+  const addMode = h('input', { type: 'checkbox', checked: true });
+  const padCard = h('div.editor-pad',
+    h('div.row.pad-head',
+      h('b', '🎹 Prueba notas'),
+      h('label.toggle.small', addMode, h('span.toggle-track', h('span.toggle-thumb')), h('span', 'Añadirlas a la canción')),
+      durSel,
+    ),
+    h('div.keyboard-wrap.editor-kb-wrap', padCanvas),
+    h('div.row.pad-actions',
+      h('button.btn.small', { onclick: () => addTok('_' + durSel.value) }, '𝄽 Silencio'),
+      h('button.btn.small', { onclick: () => addTok('|') }, '| Barra de compás'),
+      h('button.btn.small', {
+        onclick: () => {
+          notesTa.value = notesTa.value.replace(/\s*\S+\s*$/, '');
+          refresh();
+        },
+      }, '⌫ Quitar la última'),
+    ),
+  );
+  const pad = new TouchKeyboard(padCanvas, {
+    low: 60,
+    high: 84,
+    onNoteOn: (m) => {
+      audio.init();
+      audio.noteOn(m, 0.8, settings.pianoInstrument);
+      if (addMode.checked) {
+        const names = settings.notation === 'letras' ? 'letras' : 'solfeo';
+        addTok(noteToken(m, names) + durSel.value);
+      }
+    },
+    onNoteOff: (m) => audio.noteOff(m, settings.pianoInstrument),
+  });
+  let padAlive = true;
+  const padLoop = () => {
+    if (!padAlive) return;
+    requestAnimationFrame(padLoop);
+    if (!padCanvas.isConnected || padCanvas.offsetParent === null) return;
+    pad.draw();
+  };
+  padLoop();
+
+  const sheet = chordSheetPanel();
+  // Abrir una partitura o un MIDI y pasarlo al formato del editor
+  const fileIn = h('input', {
+    type: 'file', accept: '.mid,.midi,.kar,.musicxml,.mxl,.xml', style: { display: 'none' },
+    onchange: async () => {
+      const f = fileIn.files[0];
+      fileIn.value = '';
+      if (!f) return;
+      try {
+        const song = await parseAny(new Uint8Array(await f.arrayBuffer()), f.name);
+        const r = songToText(song, { notation: settings.notation === 'letras' ? 'letras' : 'solfeo' });
+        title.value = r.title || f.name.replace(/\.[^.]+$/, '');
+        bpm.value = r.bpm;
+        meter.value = r.beatsPerBar;
+        notesTa.value = r.notesText;
+        lyricsTa.value = r.lyricsText;
+        chordsIn.value = r.chordsText;
+        refresh();
+        toast(r.warnings.length ? '⚠️ ' + r.warnings.join(' ') : '✅ Canción abierta: ya puedes retocarla', 4500);
+      } catch (e) {
+        console.error(e);
+        toast('⚠️ No se pudo leer ese archivo');
+      }
+    },
+  });
+  const notesActions = h('div.row.editor-actions',
+    h('button.btn', { title: 'Convierte un MIDI o una partitura MusicXML al formato del editor', onclick: () => fileIn.click() }, '📂 Abrir partitura o MIDI'),
+    h('button.btn', { onclick: loadExample }, '📋 Cargar un ejemplo'),
+    playBtn, saveBtn, fileIn);
+  const sheetActions = h('div.row.editor-actions', ...sheet.actions);
+  let notesBody;
+  function showTab(t) {
+    lastTab = t;
+    notesBody.hidden = notesActions.hidden = t !== 'notas';
+    sheet.el.hidden = sheetActions.hidden = t !== 'acordes';
+    if (t !== 'notas') stop();
+  }
   const view = h(
     'div.view.editor-view',
-    h('div.view-toolbar',
+    h('div.view-toolbar.wrap',
       h('button.btn.icon', { title: 'Volver a canciones', onclick: () => navigate('library') }, '←'),
       h('h2', '✏️ Crear canción'),
+      segmented([['notas', '✏️ Notas y letra'], ['acordes', '🎸 Acordes y letra (pegar)']], params.tab || lastTab, showTab),
       h('div.spacer'),
-      h('button.btn', { onclick: loadExample }, '📋 Cargar un ejemplo'),
-      playBtn,
-      saveBtn,
+      notesActions,
+      sheetActions,
     ),
-    h('div.editor-body',
+    (notesBody = h('div.editor-body',
       h('div.editor-form',
         h('label.field', h('span.field-label', 'Título'), title),
         h('div.field-row', h('label.field', h('span.field-label', 'Velocidad (pulsos por minuto)'), bpm), h('label.field', h('span.field-label', 'Compás'), meter)),
@@ -62,8 +154,9 @@ export function mount(root) {
         h('label.field', h('span.field-label', '🎸 Acordes (opcional, para el karaoke de acordes)'), chordsIn),
         help,
       ),
-      h('div.editor-side', h('h3', 'Vista previa'), messages, preview),
-    ),
+      h('div.editor-side', padCard, h('h3', 'Vista previa'), messages, preview),
+    )),
+    sheet.el,
   );
   root.append(view);
 
@@ -191,7 +284,10 @@ export function mount(root) {
   }
 
   refresh();
+  showTab(params.tab || lastTab);
   return () => {
+    padAlive = false;
+    pad.destroy();
     stop();
     view.remove();
   };

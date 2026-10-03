@@ -10,7 +10,7 @@ import { navigate } from '../router.js';
 import { CameraStage } from '../ui/camera-stage.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { h } from '../ui/dom.js';
-import { Transport, speedSelect, toggleButton, accompanimentControl, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
+import { Transport, speedSelect, toggleButton, accompanimentControl, lyricsToggle, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 import { laneFromY, laneY, drawWave, handIsOn, handPoint, TRIGGER_OPTIONS } from './synth.js';
 
 const PLAY_X = 0.28; // posición de la línea de juego (fracción del ancho)
@@ -31,7 +31,7 @@ export function mount(root, params) {
     TRIGGER_OPTIONS.map(([v, t]) => h('option', { value: v, selected: v === settings.synthTrigger }, t)),
   );
   const transport = new Transport(() => player, {
-    extras: [speedSelect(() => player), accompanimentControl(), toggleButton('🥁 Metrónomo', 'metronome')],
+    extras: [speedSelect(() => player), accompanimentControl(), lyricsToggle(() => lyricsHost), toggleButton('🥁 Metrónomo', 'metronome')],
   });
   const titleEl = h('h2.song-title', 'Cargando…');
   const toolbar = h(
@@ -44,6 +44,7 @@ export function mount(root, params) {
     score.el,
   );
   const lyricsHost = h('div.lyrics-host');
+  lyricsHost.hidden = !settings.showLyrics;
   const stageWrap = h('div.stage-wrap');
   const view = h('div.view.tutorial', toolbar, lyricsHost, h('div.tutorial-body', stageWrap), transport.el);
   root.append(view);

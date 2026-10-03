@@ -92,6 +92,20 @@ export async function importFiles(files, category = '') {
   return { added, rejected };
 }
 
+/** Cambia el nombre de una canción. Devuelve su nueva ruta. */
+export async function renameSong(name, newBase) {
+  cache.delete(name);
+  if (api) return api.renameSong(name, newBase);
+  // Versión web (pruebas): solo las canciones añadidas en esta sesión
+  if (!sessionSongs.has(name)) throw new Error('Solo en la app de escritorio');
+  const ext = name.match(/\.[^.]+$/)[0];
+  const rel = newBase.trim() + ext;
+  if (sessionSongs.has(rel)) throw new Error('Ya existe');
+  sessionSongs.set(rel, sessionSongs.get(name));
+  sessionSongs.delete(name);
+  return rel;
+}
+
 /** Envía la canción a la papelera de Windows (se puede recuperar). */
 export async function removeSong(name) {
   cache.delete(name);

@@ -69,3 +69,21 @@ test('noteNameLines crea líneas de nombres de notas', () => {
   assert.equal(lines[0].syllables[0].text, 'Mi ');
   lines.forEach((l) => assert.ok(l.end > l.start && l.syllables.length <= 8));
 });
+
+test('un MIDI cuyo único "texto" es el título no cuenta como canción con letra', async () => {
+  const { default: midiFile } = await import('midi-file');
+  const notes = [];
+  for (let i = 0; i < 16; i++) {
+    notes.push({ deltaTime: i ? 240 : 0, type: 'noteOn', channel: 0, noteNumber: 60 + (i % 5), velocity: 90 });
+    notes.push({ deltaTime: 240, type: 'noteOff', channel: 0, noteNumber: 60 + (i % 5), velocity: 0 });
+  }
+  const bytes = new Uint8Array(midiFile.writeMidi({
+    header: { format: 1, numTracks: 2, ticksPerBeat: 480 },
+    tracks: [
+      [{ deltaTime: 0, meta: true, type: 'trackName', text: 'Creep' }, { deltaTime: 0, meta: true, type: 'text', text: 'Creep' }, { deltaTime: 0, meta: true, type: 'text', text: 'Radiohead' }, { deltaTime: 0, meta: true, type: 'endOfTrack' }],
+      [{ deltaTime: 0, meta: true, type: 'trackName', text: 'Piano' }, { deltaTime: 960, meta: true, type: 'text', text: 'Piano' }, ...notes, { deltaTime: 0, meta: true, type: 'endOfTrack' }],
+    ],
+  }));
+  const s = parseSong(bytes, 'Creep.mid');
+  assert.equal(s.hasLyrics, false);
+});

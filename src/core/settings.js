@@ -47,6 +47,7 @@ export const DEFAULTS = {
   // Tutoriales y karaoke
   tutorialSpeed: 1.0,
   accompaniment: true,
+  showLyrics: true, // letra visible en tutoriales y karaoke de acordes
   accompanimentVolume: 0.6,
   kcOriginalBacking: false, // karaoke de acordes: que suene también el piano original de la canción
   metronome: false,

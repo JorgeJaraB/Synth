@@ -669,6 +669,65 @@ input[type='range'] {
 .song-card.selected {
   border-color: var(--accent);
 }
+.song-card-wrap {
+  position: relative;
+  display: flex;
+}
+.song-card-wrap > .song-card {
+  flex: 1;
+  min-width: 0;
+}
+.song-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+/* Con ratón al pasar por encima; en pantallas táctiles, en la canción elegida */
+.song-card-wrap:hover .song-actions,
+.song-card-wrap:focus-within .song-actions,
+.song-card-wrap.selected .song-actions,
+.song-card-wrap.previewing .song-actions {
+  opacity: 1;
+}
+.song-action {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(15, 16, 32, 0.75);
+  color: #fff;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+.song-action:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.song-card-wrap.previewing .song-action:first-child {
+  background: var(--accent);
+  color: var(--accent-ink);
+  animation: wip-pulse 1.6s infinite;
+}
+.song-card.editing {
+  cursor: default;
+  border-color: var(--accent);
+}
+.rename-input {
+  width: 100%;
+  font: inherit;
+  font-weight: 800;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 2px solid var(--accent);
+  background: var(--bg);
+  color: var(--text);
+}
 .song-icon {
   font-size: 2rem;
 }
@@ -1866,6 +1925,70 @@ body.recording.clase .rec-float {
 .ed-note.playing {
   transform: translateY(-4px) scale(1.08);
   box-shadow: 0 0 0 3px #fff;
+}
+.editor-actions {
+  gap: 8px;
+}
+.editor-pad {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.pad-head {
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.pad-actions {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.editor-kb-wrap {
+  height: 120px;
+  position: relative;
+}
+.editor-kb {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sheet-ta {
+  min-height: 320px;
+  white-space: pre;
+  overflow-x: auto;
+  font-size: 0.92rem;
+}
+.sheet-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sheet-line.para {
+  margin-top: 10px;
+}
+.sheet-chords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sheet-chord {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 900;
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-size: 0.85rem;
+}
+.sheet-chord.out {
+  background: var(--surface);
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.sheet-lyric {
+  font-weight: 700;
+  margin-top: 2px;
 }
 @media (max-width: 900px) {
   .editor-body {

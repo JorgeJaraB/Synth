@@ -45,7 +45,7 @@ Aparece un teclado en perspectiva abajo de la imagen de la cámara. Con las mano
 <img src="docs/capturas/05-piano-aire.png" alt="Piano en el aire" width="820">
 
 ### 📚 Canciones
-La biblioteca lee las canciones de una carpeta del ordenador y las ordena por categorías. Admite MIDI, karaoke (`.kar`) y partituras de MuseScore (MusicXML). Trae canciones populares de ejemplo, como *Estrellita*, *Cumpleaños feliz* o *La cucaracha*.
+La biblioteca lee las canciones de una carpeta del ordenador y las ordena por categorías, con filtros (con letra, cortas, partituras…). Con ▶ se escucha un trozo de cada canción (el estribillo, si lo encuentra) y con ✏️ se le cambia el nombre. Admite MIDI, karaoke (`.kar`) y partituras de MuseScore (MusicXML). Trae canciones populares de ejemplo, como *Estrellita*, *Cumpleaños feliz* o *La cucaracha*.
 
 <img src="docs/capturas/06-canciones.png" alt="Biblioteca de canciones" width="820">
 
@@ -70,7 +70,7 @@ Suena la canción con su letra y los alumnos ponen los acordes con las manos. La
 <img src="docs/capturas/10-karaoke-acordes.png" alt="Karaoke de acordes" width="820">
 
 ### ✏️ Crear canciones
-Escribe las notas (`Do Do Sol Sol La La Sol-`) y la letra (`Es-tre-lli-ta`), escúchala y guárdala en la biblioteca, lista para los tutoriales y el karaoke.
+Escribe las notas (`Do Do Sol Sol La La Sol-`) y la letra (`Es-tre-lli-ta`) o pruébalas en el teclado, escúchala y guárdala en la biblioteca, lista para los tutoriales y el karaoke. También puedes abrir una partitura o un MIDI para retocarlo, o **pegar una canción de una web de acordes** (acordes encima de la letra) y tocarla en el karaoke de acordes.
 
 <img src="docs/capturas/11-crear-cancion.png" alt="Crear canciones" width="820">
 

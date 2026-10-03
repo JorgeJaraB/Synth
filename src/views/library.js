@@ -1,12 +1,15 @@
 // Biblioteca de canciones: lista la carpeta, permite añadir y elegir cómo practicar.
 import {
-  listSongs, loadSong, importFiles, removeSong, onSongsChanged, openSongsFolder, songsFolderPath,
+  listSongs, loadSong, importFiles, removeSong, renameSong, onSongsChanged, openSongsFolder, songsFolderPath,
   isDesktop, displayName, EXAMPLES_CATEGORY,
 } from '../core/library.js';
 import { navigate } from '../router.js';
 import { noteName } from '../core/notes.js';
 import { settings } from '../core/settings.js';
 import { h, toast, formatTime } from '../ui/dom.js';
+import { audio } from '../core/audio.js';
+import { SongPlayer } from '../core/player.js';
+import { previewStart, PREVIEW_SECONDS } from '../core/song-preview.js';
 
 const MY_SONGS = 'Mis canciones';
 const ALL = '__todas__';
@@ -204,11 +207,111 @@ export function mount(root, params = {}) {
   function songCard(s, i) {
     const kar = /\.kar$/i.test(s.name);
     const score = isScore(s.name);
-    return h('button.song-card', { 'data-name': s.name, style: { '--hue': (i * 47) % 360 }, class: s.name === lastSelected ? 'selected' : '', onclick: () => select(s.name) },
+    const card = h('button.song-card', {
+      'data-name': s.name, style: { '--hue': (i * 47) % 360 }, class: s.name === lastSelected ? 'selected' : '',
+      onclick: () => select(s.name),
+      oncontextmenu: (e) => {
+        e.preventDefault();
+        startRename(s, wrap);
+      },
+    },
       h('div.song-icon', score ? '📄' : kar ? '🎤' : '🎼'),
       h('div.song-name', displayName(s.name)),
       h('div.song-type', cardInfo(s, score, kar)),
     );
+    const playing = preview?.name === s.name;
+    const wrap = h('div.song-card-wrap', { 'data-name': s.name, class: [s.name === lastSelected ? 'selected' : '', playing ? 'previewing' : ''].join(' ') },
+      card,
+      h('div.song-actions',
+        h('button.song-action', { title: playing ? 'Parar' : `Escuchar un trozo (${PREVIEW_SECONDS} s)`, onclick: () => togglePreview(s.name) }, playing ? '⏹' : '▶'),
+        h('button.song-action', { title: 'Cambiar el nombre (o clic derecho)', onclick: () => startRename(s, wrap) }, '✏️'),
+      ),
+    );
+    return wrap;
+  }
+
+  // ---------- Cambiar el nombre ----------
+  function startRename(s, wrap) {
+    const input = h('input.rename-input', { type: 'text', value: displayName(s.name), maxLength: 80 });
+    let done = false;
+    const finish = async (save) => {
+      if (done) return;
+      done = true;
+      const value = input.value.trim();
+      if (!save || !value || value === displayName(s.name)) return renderList();
+      try {
+        const rel = await renameSong(s.name, value);
+        meta.delete(s.name);
+        if (lastSelected === s.name) lastSelected = rel;
+        toast('✏️ Nombre cambiado');
+        await refresh();
+        select(rel);
+      } catch (e) {
+        console.error(e);
+        toast(/existe/i.test(e?.message) ? '⚠️ Ya hay una canción con ese nombre' : '⚠️ No se pudo cambiar el nombre', 3500);
+        renderList();
+      }
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Escape') finish(false);
+    });
+    input.addEventListener('blur', () => finish(true));
+    wrap.replaceChildren(h('div.song-card.editing', { style: { '--hue': wrap.firstChild?.style?.getPropertyValue('--hue') || 0 } },
+      h('div.song-icon', '✏️'),
+      input,
+      h('div.song-type', 'Enter para guardar · Esc para cancelar'),
+    ));
+    input.focus();
+    input.select();
+  }
+
+  // ---------- Escuchar un trozo ----------
+  let preview = null; // { name, player, raf }
+  function stopPreview() {
+    if (!preview) return;
+    cancelAnimationFrame(preview.raf);
+    preview.player.pause();
+    audio.releaseAll();
+    const name = preview.name;
+    preview = null;
+    markPreview(name, false);
+  }
+  function markPreview(name, on) {
+    for (const w of list.querySelectorAll('.song-card-wrap')) {
+      if (w.dataset.name !== name) continue;
+      w.classList.toggle('previewing', on);
+      const b = w.querySelector('.song-action');
+      if (b) b.textContent = on ? '⏹' : '▶';
+    }
+  }
+  async function togglePreview(name) {
+    if (preview?.name === name) return stopPreview();
+    stopPreview();
+    await audio.init();
+    let song;
+    try {
+      song = await loadSong(name);
+    } catch {
+      toast('⚠️ No se pudo leer esta canción');
+      return;
+    }
+    if (!alive) return;
+    const start = previewStart(song);
+    const player = new SongPlayer(song, { mode: 'escuchar', allTracks: true });
+    player.speed = 1;
+    player.seek(start);
+    player.play();
+    preview = { name, player, raf: 0 };
+    markPreview(name, true);
+    const end = start + PREVIEW_SECONDS;
+    const loop = () => {
+      if (!preview || preview.player !== player) return;
+      player.update();
+      if (player.time >= end || !player.playing) return stopPreview();
+      preview.raf = requestAnimationFrame(loop);
+    };
+    loop();
   }
 
   function cardInfo(s, score, kar) {
@@ -271,7 +374,7 @@ export function mount(root, params = {}) {
 
   async function select(name) {
     lastSelected = name;
-    for (const c of list.querySelectorAll('.song-card')) c.classList.toggle('selected', c.dataset.name === name);
+    for (const c of list.querySelectorAll('.song-card, .song-card-wrap')) c.classList.toggle('selected', c.dataset.name === name);
     detail.replaceChildren(h('div.spinner'));
     detail.classList.add('open');
     let song;
@@ -351,6 +454,7 @@ export function mount(root, params = {}) {
 
   return () => {
     alive = false;
+    stopPreview();
     offChange();
     view.remove();
   };
