@@ -30,6 +30,10 @@ export const DEFAULTS = {
   chordArpeggio: false,
   chordProgression: 'ninguna',
   chordTutorialDone: false,
+  chordTutorialOffered: false, // el tutorial se ofrece solo una vez
+  chordHintSeen: false,
+  chordLegendChord: true, // tablas de gestos sobre la cámara (abiertas / cerradas)
+  chordLegendExpr: true,
   // Piano
   pianoInstrument: 'piano',
   pianoLow: 48,

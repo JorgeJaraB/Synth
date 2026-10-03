@@ -115,7 +115,7 @@ export function analyzeHand(lm, world = null, prevThumb = false) {
     extended,
     pinch: pinchDist < 0.38,
     pinchDist,
-    fist: nExt === 0 && !extended.thumb,
+    fist: nExt === 0, // puño aunque el pulgar quede por fuera
     indexUp: extended.index,
     openHand: nExt >= 4,
   };

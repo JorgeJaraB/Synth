@@ -40,6 +40,24 @@ export function mount(root) {
   // ---------- Panel lateral ----------
   const legendRows = [];
   const legend = h('div.chord-legend');
+  const exprLegend = h('div.chord-legend');
+  // Tarjetas desplegables sobre la cámara, una a cada lado (se abren y cierran con su título).
+  function floatCard(key, body) {
+    const title = h('span');
+    const el = h('div.legend-float', { class: settings[key] ? 'open' : '' },
+      h('button.legend-float-head', {
+        title: 'Mostrar u ocultar',
+        onclick: () => {
+          settings[key] = !settings[key];
+          el.classList.toggle('open', settings[key]);
+        },
+      }, title, h('span.legend-float-arrow', '▾')),
+      h('div.legend-float-body', body),
+    );
+    return { el, setTitle: (t) => (title.textContent = t) };
+  }
+  const chordLegendCard = floatCard('chordLegendChord', legend);
+  const exprLegendCard = floatCard('chordLegendExpr', exprLegend);
   function renderLegend() {
     legendRows.length = 0;
     legend.replaceChildren(
@@ -47,7 +65,7 @@ export function mount(root) {
         const deg = i + 1;
         const q = NATURAL_QUALITY[i];
         const row = h('div.legend-row', { style: { '--c': noteColor(chordRoot(tonic(), deg)) } },
-          h('span.legend-sign', { html: handSvg(shape, { side: settings.chordLefty ? 'derecha' : 'izquierda', size: 44 }) }),
+          h('span.legend-sign', { html: handSvg(shape, { side: settings.chordLefty ? 'derecha' : 'izquierda', size: 38 }) }),
           h('span.legend-text', SIGN_TEXT[i]),
           h('span.legend-roman', romanFor(deg, q)),
           h('span.legend-chord', chordSymbol(tonic(), deg, q, 'triada', settings.notation)),
@@ -55,8 +73,21 @@ export function mount(root) {
         legendRows.push(row);
         return row;
       }),
-      h('div.legend-row.muted-row', h('span.legend-sign', { html: handSvg('', { side: settings.chordLefty ? 'derecha' : 'izquierda', size: 44 }) }), h('span.legend-text', 'puño'), h('span.legend-roman', ''), h('span.legend-chord', 'silencio')),
+      h('div.legend-row.muted-row', h('span.legend-sign', { html: handSvg('', { side: settings.chordLefty ? 'derecha' : 'izquierda', size: 38 }) }), h('span.legend-text', 'puño'), h('span.legend-roman', ''), h('span.legend-chord', 'silencio')),
+      h('p.legend-tip', '↔️ Inclínala: ', h('b', 'hacia dentro = mayor'), ', ', h('b', 'hacia fuera = menor'), '. Recta = el acorde natural.'),
     );
+    const other = settings.chordLefty ? 'izquierda' : 'derecha';
+    exprLegend.replaceChildren(
+      ...[['i', '1 dedo', 'acorde normal'], ['im', '2 dedos', '1.ª inversión'], ['ima', '3 dedos', 'con séptima'], ['imae', '4 dedos', 'dominante / disminuido'], ['', 'puño', 'silencio']].map(([shape, n, txt]) =>
+        h('div.legend-row.expr-row', h('span.legend-sign', { html: handSvg(shape, { side: other, size: 38 }) }), h('span.legend-text', n), h('span.legend-chord', txt)),
+      ),
+      h('p.legend-tip', '↕️ Altura: volumen · ↔️ Inclinar: brillo'),
+    );
+    chordLegendCard.setTitle(settings.chordLefty ? '✋ Mano derecha: el acorde' : '✋ Mano izquierda: el acorde');
+    exprLegendCard.setTitle(settings.chordLefty ? '🤚 Mano izquierda: cómo suena' : '🤚 Mano derecha: cómo suena');
+    // La mano de los acordes se ve a la izquierda de la pantalla (imagen en espejo), salvo zurdos.
+    chordLegendCard.el.classList.toggle('right', settings.chordLefty);
+    exprLegendCard.el.classList.toggle('right', !settings.chordLefty);
   }
 
   const progHost = h('div.progression');
@@ -94,48 +125,34 @@ export function mount(root) {
     settingSelect('Progresión para practicar', 'chordProgression', Object.entries(PROGRESSIONS).map(([k, v]) => [k, v.name]), renderProgression),
     settingSelect('Nombres de las notas', 'notation', [['solfeo', 'Do, Re, Mi'], ['letras', 'C, D, E'], ['colores', 'Colores']], onChange),
     settingRange('Eco de sala (reverb)', 'reverb'),
-    h('h3.legend-title'),
-    legend,
-    h('p.muted', '↔️ Inclina esa mano: ', h('b', 'hacia dentro = mayor'), ', ', h('b', 'hacia fuera = menor'), '. Recta = el acorde natural de la escala.'),
-    h('h3.legend-title', '🤚 La otra mano: cómo suena'),
-    h('ul.expr-legend',
-      h('li', '☝️ 1 dedo: acorde normal (tríada)'),
-      h('li', '✌️ 2 dedos: 1.ª inversión'),
-      h('li', '3 dedos: con séptima'),
-      h('li', '4 dedos: séptima de dominante (o disminuido si el acorde es menor)'),
-      h('li', '↕️ Altura: volumen · ↔️ Inclinar: brillo'),
-      h('li', '✊ Puño: silencio'),
-    ),
     h('p.muted.credit', 'Idea inspirada en «Gesture Synth» de Eric Wei (indecisive.eric).'),
   );
-  // El título de la leyenda cambia con la opción de zurdo/a.
-  const legendTitle = panel.querySelector('.legend-title');
-  const setLegendTitle = () => (legendTitle.textContent = settings.chordLefty ? '✋ Mano derecha: el acorde' : '✋ Mano izquierda: el acorde');
-  setLegendTitle();
 
   const hint = h(
     'div.hint-card',
     h('h3', '¿Cómo se toca?'),
     h('ul',
-      h('li', '✋ Con la ', h('b', 'mano izquierda'), ' levanta dedos: 1 dedo = acorde I, 2 = II… (mira la tabla de la derecha).'),
+      h('li', '✋ Con la ', h('b', 'mano izquierda'), ' levanta dedos: 1 dedo = acorde I, 2 = II… (mira las tablas a los lados de la cámara).'),
       h('li', '↔️ Inclínala para cambiar entre mayor y menor.'),
       h('li', '🤚 Con la otra mano: súbela o bájala para el volumen e inclínala para el brillo.'),
       h('li', '✊ Cierra el puño para callar.'),
     ),
     h('button.btn.small', { onclick: () => hint.remove() }, 'Entendido'),
   );
-  const stageWrap = h('div.stage-wrap', progHost);
+  const stageWrap = h('div.stage-wrap', progHost, chordLegendCard.el, exprLegendCard.el);
   let tutorial = null;
   function startTutorial(atIntro = false) {
     hint.remove();
     tutorial?.close();
     panel.classList.remove('open');
     progHost.style.display = 'none';
+    stageWrap.classList.add('tutorial-on'); // las tablas se ocultan durante el tutorial
     tutorial = new ChordTutorial(stageWrap, {
       tonic,
       onClose: () => {
         tutorial = null;
         progHost.style.display = '';
+        stageWrap.classList.remove('tutorial-on');
       },
     });
     if (!atIntro) tutorial.go(1);
@@ -144,9 +161,15 @@ export function mount(root) {
   root.append(view);
   renderLegend();
   renderProgression();
-  // La primera vez se ofrece el tutorial; después, la tarjeta de ayuda breve.
-  if (!settings.chordTutorialDone) startTutorial(true);
-  else stageWrap.append(hint);
+  // El tutorial se ofrece solo la primera vez que se entra (luego está en el botón del panel),
+  // y la ayuda breve tampoco se repite: las tablas de los lados ya explican los gestos.
+  if (!settings.chordTutorialDone && !settings.chordTutorialOffered) {
+    settings.chordTutorialOffered = true;
+    startTutorial(true);
+  } else if (!settings.chordHintSeen) {
+    settings.chordHintSeen = true;
+    stageWrap.append(hint);
+  }
   if (import.meta.env.DEV) window.__chords = { reader, get tutorial() { return tutorial; }, get current() { return current; }, get voice() { return voice; }, get volume() { return volume; }, get progStep() { return progStep; } };
 
   function rebuildVoice() {
@@ -333,10 +356,7 @@ export function mount(root) {
   }
 
   const off = onSettingsChange((k) => {
-    if (k === 'chordLefty') {
-      setLegendTitle();
-      renderLegend();
-    }
+    if (k === 'chordLefty') renderLegend();
   });
 
   return () => {

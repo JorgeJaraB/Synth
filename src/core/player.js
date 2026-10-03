@@ -27,7 +27,7 @@ export class SongPlayer {
     this.time = opts.startAt ?? -1.5; // pequeña cuenta atrás antes de empezar
     this.playing = false;
     this.waiting = null;
-    this.listeners = { end: new Set(), hit: new Set(), miss: new Set() };
+    this.listeners = { end: new Set(), hit: new Set(), miss: new Set(), early: new Set() };
     this.score = { hits: 0, misses: 0, streak: 0, best: 0, points: 0 };
     this._resetPointers();
   }
@@ -95,17 +95,28 @@ export class SongPlayer {
    * El alumno ha tocado una nota. Devuelve true si era correcta.
    * Con penalize=false un fallo no rompe la racha (útil para notas mantenidas).
    */
-  input(midi, { penalize = true } = {}) {
+  input(midi, { penalize = true, since = null } = {}) {
+    // since: momento de la canción en que el alumno empezó a tocar esto (para acordes que se
+    // mantienen). Si fue claramente antes de tiempo, no vale: se había adelantado.
+    // Solo es adelantarse si cambió mientras aún tocaba el acorde anterior (preparar el
+    // primero antes de empezar, o durante un silencio, está bien).
+    const tooEarly = (n, margin) => {
+      if (since == null) return false;
+      const prev = this.practice[this.practice.indexOf(n) - 1];
+      return !!prev && since >= prev.time && since < Math.min(prev.time + prev.duration, n.time - margin);
+    };
     if (this.mode === 'esperar') {
       const target = this.waiting?.find((n) => n.midi === midi && n.state !== 'hit');
       if (target) {
-        this._hit(target);
+        // En Practicar la canción sigue igual, pero adelantarse no suma puntos ni racha.
+        if (tooEarly(target, 0.25)) this._early(target);
+        else this._hit(target);
         if (this.expectedNow().length === 0) this.waiting = null;
         return true;
       }
       // Permitimos tocar la siguiente nota un poco antes de que llegue.
       const early = this.practice.find((n) => !n.state && n.midi === midi && n.time - this.time < 0.25 && n.time >= this.time - 0.01);
-      if (early) {
+      if (early && !tooEarly(early, 0.25)) {
         this._hit(early);
         return true;
       }
@@ -120,6 +131,15 @@ export class SongPlayer {
         const d = Math.abs(n.time - this.time);
         if (d <= HIT_WINDOW && (!best || d < best.d)) best = { n, d };
       }
+      if (best && tooEarly(best.n, HIT_WINDOW)) {
+        // Cambió antes de tiempo: ese acorde cuenta como fallo.
+        best.n.state = 'miss';
+        this.score.misses++;
+        this.score.streak = 0;
+        this._emit('early', best.n);
+        this._emit('miss', best.n);
+        return false;
+      }
       if (best) {
         this._hit(best.n, best.d);
         return true;
@@ -128,6 +148,14 @@ export class SongPlayer {
       return false;
     }
     return false;
+  }
+
+  /** Acertado pero antes de tiempo (modo Practicar): cuenta como hecho, sin puntos ni racha. */
+  _early(n) {
+    n.state = 'hit';
+    n.early = true;
+    this.score.streak = 0;
+    this._emit('early', n);
   }
 
   _hit(n, delta = 0) {

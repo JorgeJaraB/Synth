@@ -73,6 +73,9 @@ export const chordRoot = (tonic, degree) => tonic + MAJOR_STEPS[degree - 1];
  *   1..5 dedos → I..V · 🤘 índice + meñique → VI · 🤟 (con pulgar) → VII · puño → 0 (silencio)
  */
 export function degreeFromFingers(ext) {
+  // Con los cuatro dedos cerrados es un puño (silencio), esté el pulgar dentro o por fuera:
+  // el pulgar solo cuenta junto a otros dedos levantados.
+  if (!ext.index && !ext.middle && !ext.ring && !ext.pinky) return 0;
   if (ext.index && ext.pinky && !ext.middle && !ext.ring) return ext.thumb ? 7 : 6;
   return ['thumb', 'index', 'middle', 'ring', 'pinky'].filter((f) => ext[f]).length;
 }

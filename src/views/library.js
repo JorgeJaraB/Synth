@@ -12,6 +12,20 @@ const MY_SONGS = 'Mis canciones';
 const ALL = '__todas__';
 let lastSelected = null;
 let lastCategory = ALL;
+let lastFilters = new Set();
+let lastSort = 'nombre';
+// Datos de cada canción (letra, duración) que se van leyendo en segundo plano para los filtros.
+const meta = new Map();
+
+const WEEK = 7 * 24 * 3600 * 1000;
+const FILTERS = [
+  ['letra', '🎤 Con letra'],
+  ['sinletra', '🎹 Sin letra'],
+  ['cortas', '⏱️ Cortas (1 min o menos)'],
+  ['partitura', '📄 Partituras'],
+  ['nuevas', '🆕 Añadidas esta semana'],
+];
+const isScore = (name) => /\.(musicxml|mxl|xml)$/i.test(name);
 
 const categoryLabel = (c) => c || MY_SONGS;
 
@@ -34,6 +48,7 @@ export function howToAddCard(folderPath, onClose) {
 
 export function mount(root, params = {}) {
   let songs = [];
+  let alive = true;
   let category = lastCategory;
   let query = '';
   let showHelp = false;
@@ -41,6 +56,15 @@ export function mount(root, params = {}) {
 
   const list = h('div.song-list');
   const chips = h('div.category-chips');
+  let filters = lastFilters;
+  let sort = lastSort;
+  const filterChips = h('div.category-chips.filter-chips');
+  const metaStatus = h('span.muted.meta-status');
+  const sortSel = h('select.compact', {
+    title: 'Ordenar',
+    onchange: () => { sort = lastSort = sortSel.value; renderList(); },
+  },
+    [['nombre', '🔤 Por nombre'], ['recientes', '🆕 Más recientes'], ['cortas', '⏱️ Más cortas']].map(([v, t]) => h('option', { value: v, selected: v === sort }, t)));
   const helpHost = h('div');
   const detail = h('aside.panel.song-detail', h('div.empty-detail', h('div.big-emoji', '🎵'), h('p', 'Elige una canción de la lista')));
   const fileInput = h('input', {
@@ -65,7 +89,7 @@ export function mount(root, params = {}) {
         h('button.btn.icon', { title: 'Cómo añadir canciones', onclick: () => { showHelp = !showHelp; renderHelp(); } }, '❓'),
         fileInput,
       ),
-      h('div.library-body', helpHost, chips, list),
+      h('div.library-body', helpHost, chips, filterChips, list),
     ),
     detail,
   );
@@ -112,28 +136,110 @@ export function mount(root, params = {}) {
     );
   }
 
-  function songCard(s, i) {
-    const kar = /\.kar$/i.test(s.name);
-    const score = /\.(musicxml|mxl|xml)$/i.test(s.name);
-    return h('button.song-card', { 'data-name': s.name, style: { '--hue': (i * 47) % 360 }, class: s.name === lastSelected ? 'selected' : '', onclick: () => select(s.name) },
-      h('div.song-icon', score ? '📄' : kar ? '🎤' : '🎼'),
-      h('div.song-name', displayName(s.name)),
-      h('div.song-type', score ? 'Partitura' : kar ? 'Con letra' : 'MIDI'),
+  function renderFilters() {
+    const hasDates = songs.some((x) => x.mtime);
+    filterChips.replaceChildren(
+      h('span.filter-label', 'Filtrar:'),
+      ...FILTERS.filter(([k]) => k !== 'nuevas' || hasDates).map(([k, label]) =>
+        h('button.chip.small', {
+          class: filters.has(k) ? 'active' : '',
+          onclick: () => {
+            if (filters.has(k)) filters.delete(k);
+            else {
+              filters.add(k);
+              // "Con letra" y "Sin letra" no pueden ir juntas
+              if (k === 'letra') filters.delete('sinletra');
+              if (k === 'sinletra') filters.delete('letra');
+            }
+            renderFilters();
+            renderList();
+          },
+        }, label)),
+      h('div.spacer'),
+      metaStatus,
+      sortSel,
     );
   }
 
+  /** ¿Pasa la canción los filtros? null = aún no se sabe (se está leyendo). */
+  function passes(s) {
+    const m = meta.get(s.name);
+    for (const f of filters) {
+      if (f === 'partitura' && !isScore(s.name)) return false;
+      if (f === 'nuevas' && !(s.mtime && Date.now() - s.mtime < WEEK)) return false;
+      if (f === 'letra' || f === 'sinletra' || f === 'cortas') {
+        if (!m) return null;
+        if (m.error) return false;
+        if (f === 'letra' && !m.hasLyrics) return false;
+        if (f === 'sinletra' && m.hasLyrics) return false;
+        if (f === 'cortas' && m.duration > 61) return false;
+      }
+    }
+    return true;
+  }
+
+  // Lee en segundo plano las canciones que faltan (de una en una para no bloquear la app).
+  let metaRun = 0;
+  async function loadMeta() {
+    const run = ++metaRun;
+    const missing = songs.filter((x) => !meta.has(x.name));
+    let done = 0;
+    for (const x of missing) {
+      if (run !== metaRun || !alive) return;
+      metaStatus.textContent = `Leyendo canciones… ${done}/${missing.length}`;
+      try {
+        const song = await loadSong(x.name);
+        meta.set(x.name, { hasLyrics: song.hasLyrics, duration: song.duration });
+      } catch {
+        meta.set(x.name, { error: true });
+      }
+      done++;
+      if (done % 8 === 0 && (filters.size || sort === 'cortas')) renderList();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    metaStatus.textContent = '';
+    if (missing.length) renderList();
+  }
+
+  function songCard(s, i) {
+    const kar = /\.kar$/i.test(s.name);
+    const score = isScore(s.name);
+    return h('button.song-card', { 'data-name': s.name, style: { '--hue': (i * 47) % 360 }, class: s.name === lastSelected ? 'selected' : '', onclick: () => select(s.name) },
+      h('div.song-icon', score ? '📄' : kar ? '🎤' : '🎼'),
+      h('div.song-name', displayName(s.name)),
+      h('div.song-type', cardInfo(s, score, kar)),
+    );
+  }
+
+  function cardInfo(s, score, kar) {
+    const m = meta.get(s.name);
+    const kind = score ? 'Partitura' : kar ? 'Karaoke' : 'MIDI';
+    if (!m || m.error) return kind;
+    return `${score ? 'Partitura · ' : ''}${m.hasLyrics ? '🎤 Con letra' : 'Sin letra'} · ${formatTime(m.duration)}`;
+  }
+
   function renderList() {
-    let visible = songs.filter((s) => (category === ALL || s.category === category) && (!query || displayName(s.name).toLowerCase().includes(query)));
+    const pending = [];
+    let visible = songs.filter((s) => {
+      if (!((category === ALL || s.category === category) && (!query || displayName(s.name).toLowerCase().includes(query)))) return false;
+      const ok = passes(s);
+      if (ok === null) pending.push(s);
+      return ok === true;
+    });
+    if (sort === 'recientes') visible = [...visible].sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+    if (sort === 'cortas') visible = [...visible].sort((a, b) => (meta.get(a.name)?.duration ?? 1e9) - (meta.get(b.name)?.duration ?? 1e9));
     if (!songs.length) {
       list.replaceChildren(h('div.empty-state', h('div.big-emoji', '🎼'), h('h3', 'Todavía no hay canciones'), h('p', 'Arrastra aquí archivos MIDI, karaoke o partituras MusicXML, o crea una canción con ✏️.')));
       return;
     }
     if (!visible.length) {
-      list.replaceChildren(h('div.empty-state', h('p', `No hay canciones que coincidan con "${search.value}".`)));
+      list.replaceChildren(h('div.empty-state', h('p', pending.length
+        ? 'Leyendo las canciones para filtrarlas…'
+        : query ? `No hay canciones que coincidan con "${search.value}".` : 'Ninguna canción cumple los filtros elegidos.')));
       return;
     }
     let i = 0;
-    if (category === ALL && !query && categories().length > 1) {
+    if (category === ALL && !query && !filters.size && sort === 'nombre' && categories().length > 1) {
       list.replaceChildren(
         ...categories().map(([c]) => h('section.song-section',
           h('h3.section-title', c === EXAMPLES_CATEGORY ? '⭐ ' + c : c === '' ? '🎵 ' + MY_SONGS : '📁 ' + c),
@@ -153,8 +259,10 @@ export function mount(root, params = {}) {
       songs = [];
     }
     renderChips();
+    renderFilters();
     renderList();
     renderHelp();
+    loadMeta();
     if (lastSelected && !songs.some((s) => s.name === lastSelected)) {
       lastSelected = null;
       detail.replaceChildren(h('div.empty-detail', h('div.big-emoji', '🎵'), h('p', 'Elige una canción de la lista')));
@@ -242,6 +350,7 @@ export function mount(root, params = {}) {
   });
 
   return () => {
+    alive = false;
     offChange();
     view.remove();
   };

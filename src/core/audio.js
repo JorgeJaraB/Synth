@@ -69,7 +69,7 @@ export const INSTRUMENTS = {
  * acorde al siguiente (como en Gesture Synth): suenan limpios, afinados y sin cortes.
  */
 export const CHORD_WAVES = {
-  limpio: { name: 'Synth limpio (como Gesture Synth)', emoji: '✨', wave: 'triangle', level: 0.24 },
+  limpio: { name: 'Synth limpio', emoji: '✨', wave: 'triangle', level: 0.24 },
   puro: { name: 'Onda pura (muy suave)', emoji: '🌊', wave: 'sine', level: 0.27 },
   brillante: { name: 'Sierra brillante', emoji: '⚡', wave: 'sawtooth', level: 0.12 },
   cuadrada: { name: 'Cuadrada retro', emoji: '👾', wave: 'square', level: 0.1 },
