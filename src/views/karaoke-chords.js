@@ -5,7 +5,7 @@ import { settings } from '../core/settings.js';
 import { loadSong } from '../core/library.js';
 import { SongPlayer } from '../core/player.js';
 import { chordTimeline } from '../core/harmony.js';
-import { chordNotes, chordSymbol, chordRoot, romanFor, NATURAL_QUALITY, qualityFor } from '../core/chords.js';
+import { chordNotes, chordSymbol, chordRoot, romanFor, qualityFor } from '../core/chords.js';
 import { ChordHandReader } from '../core/chord-hands.js';
 import { noteColor, SOLFEGE, LETTERS } from '../core/notes.js';
 import { navigate } from '../router.js';
@@ -17,6 +17,10 @@ import { h } from '../ui/dom.js';
 import { Transport, speedSelect, toggleButton, accompanimentControl, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
+const QUALITY_CODE = { mayor: 0, menor: 1, dim: 2 };
+/** El reproductor compara "notas": el código junta el grado y si es mayor o menor. */
+const chordCode = (degree, quality) => degree * 10 + QUALITY_CODE[quality];
+const QUALITY_WORD = { mayor: 'mayor', menor: 'menor', dim: 'disminuido' };
 const NOW_X = 0.24;
 // Con el piano de la canción suenan muchas más notas a la vez: se bajan para no saturar.
 const BACKING_GAIN = 0.6;
@@ -44,6 +48,28 @@ export function mount(root, params) {
   let voice = null;
   let lyrics = null;
   const reader = new ChordHandReader();
+  let heldCode = null; // acorde que hace ahora el alumno
+  let heldSince = 0; // desde cuándo (tiempo de la canción)
+  // Mensaje corto sobre la cámara (adelantarse, casi acertado…)
+  let message = null;
+  const say = (text, ms = 1400) => (message = { text, until: performance.now() + ms });
+  function drawMessage(ctx, w, hh) {
+    if (!message || performance.now() > message.until) return;
+    ctx.save();
+    ctx.font = '800 22px Nunito, system-ui, sans-serif';
+    const tw = ctx.measureText(message.text).width;
+    const x = w / 2;
+    const y = 112;
+    ctx.fillStyle = 'rgba(15,16,32,0.85)';
+    ctx.beginPath();
+    ctx.roundRect(x - tw / 2 - 18, y - 22, tw + 36, 44, 22);
+    ctx.fill();
+    ctx.fillStyle = '#ffd166';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(message.text, x, y + 1);
+    ctx.restore();
+  }
   let harmonyTracks = []; // pistas que se callan para que los acordes los ponga el alumno
 
   const score = scoreBox();
@@ -94,9 +120,9 @@ export function mount(root, params) {
     shownKey = key;
     const block = (c, big) =>
       c
-        ? h('div.kc-chord', { class: big ? 'big' : '', style: { '--c': noteColor(chordRoot(tonic, c.midi)) } },
-            h('div.kc-hand', { html: handSvg(HAND_SHAPES[c.midi - 1], { side: settings.chordLefty ? 'derecha' : 'izquierda', size: big ? 96 : 60 }) }),
-            h('div', h('b', romanFor(c.midi, NATURAL_QUALITY[c.midi - 1])), h('span', chordSymbol(tonic, c.midi, NATURAL_QUALITY[c.midi - 1], 'triada', settings.notation))),
+        ? h('div.kc-chord', { class: big ? 'big' : '', style: { '--c': noteColor(chordRoot(tonic, c.degree)) } },
+            h('div.kc-hand', { html: handSvg(HAND_SHAPES[c.degree - 1], { side: settings.chordLefty ? 'derecha' : 'izquierda', size: big ? 96 : 60 }) }),
+            h('div', h('b', romanFor(c.degree, c.quality)), h('span', chordSymbol(tonic, c.degree, c.quality, 'triada', settings.notation)), h('small.kc-quality', QUALITY_WORD[c.quality])),
           )
         : null;
     nowCard.replaceChildren(
@@ -124,7 +150,7 @@ export function mount(root, params) {
       const x1 = nowX + (c.time - t) * pps;
       const x2 = nowX + (c.time + c.duration - t) * pps;
       if (x2 < 0 || x1 > w) continue;
-      const col = c.state === 'miss' ? '#6b6f80' : noteColor(chordRoot(tonic, c.midi));
+      const col = c.state === 'miss' ? '#6b6f80' : noteColor(chordRoot(tonic, c.degree));
       ctx.globalAlpha = c.state === 'hit' ? 1 : 0.88;
       ctx.fillStyle = col;
       ctx.beginPath();
@@ -137,7 +163,7 @@ export function mount(root, params) {
       }
       ctx.globalAlpha = 1;
       const bw = x2 - x1;
-      const img = handImage(c.midi);
+      const img = handImage(c.degree);
       let tx = x1 + 12;
       if (bw > 70 && img.complete) {
         ctx.drawImage(img, x1 + 6, top + 4, 56, 46);
@@ -148,9 +174,9 @@ export function mount(root, params) {
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.font = '900 22px Nunito, system-ui, sans-serif';
-        ctx.fillText(romanFor(c.midi, NATURAL_QUALITY[c.midi - 1]), tx, top + 22);
+        ctx.fillText(romanFor(c.degree, c.quality), tx, top + 22);
         ctx.font = '800 15px Nunito, system-ui, sans-serif';
-        ctx.fillText(chordSymbol(tonic, c.midi, NATURAL_QUALITY[c.midi - 1], 'triada', settings.notation) + (c.state === 'hit' ? ' ✓' : ''), tx, top + 46);
+        ctx.fillText(chordSymbol(tonic, c.degree, c.quality, 'triada', settings.notation) + (c.state === 'hit' ? (c.early ? ' ⏩' : ' ✓') : ''), tx, top + 46);
       }
     }
     ctx.fillStyle = 'rgba(255,200,60,0.95)';
@@ -174,8 +200,21 @@ export function mount(root, params) {
         voice.setVolume(stable && !listening ? r.volume : 0);
         voice.setBrightness(r.brightness);
       }
-      if (player && stable && !r.exprMuted && !listening) player.input(stable.degree, { penalize: false });
+      // Se recuerda cuándo empezó el alumno a hacer el acorde actual (para no premiar adelantarse).
+      const code = stable ? chordCode(stable.degree, stable.quality) : null;
+      if (code !== heldCode) {
+        heldCode = code;
+        heldSince = player ? player.time : 0;
+      }
+      // Cuenta aunque no esté la mano derecha (la canción sigue); el puño de esa mano sí calla.
+      const fistMuted = r.expr && r.exprMuted;
+      if (player && stable && !fistMuted && !listening) player.input(code, { penalize: false, since: heldSince });
       drawLane(ctx, w);
+      // Casi: el grado está bien pero falta cambiar entre mayor y menor
+      const want = player?.expectedNow?.()[0] || player?.practice.find((c) => !c.state && c.time <= player.time + 0.05 && c.time + c.duration > player.time);
+      const nearMiss = !listening && stable && want && want.degree === stable.degree && want.quality !== stable.quality;
+      if (nearMiss) say(`↔️ ¡Casi! Este acorde es ${QUALITY_WORD[want.quality]}: ${want.quality === 'mayor' ? 'inclina la mano hacia dentro o ponla recta' : want.quality === 'menor' ? 'inclina la mano hacia fuera o ponla recta' : 'pon la mano recta'}`, 300);
+      drawMessage(ctx, w, hh);
       if (r.chordInfo && r.chordInfo.degree >= 1) {
         const { pos, degree, tilt } = r.chordInfo;
         ctx.save();
@@ -215,13 +254,14 @@ export function mount(root, params) {
     tonic = 48 + res.tonic;
     keyEl.textContent = `🎼 ${SOLFEGE[res.tonic]} mayor (${LETTERS[res.tonic]})`;
     chords = res.chords;
-    // Los acordes se guardan como "notas" cuyo valor es el grado (1..7) para reutilizar el reproductor.
-    const practice = chords.map((c) => ({ midi: c.degree, time: c.time, duration: c.duration, velocity: 0.8 }));
+    // Los acordes se guardan como "notas" (grado + calidad) para reutilizar el reproductor.
+    const practice = chords.map((c) => ({ midi: chordCode(c.degree, c.quality), degree: c.degree, quality: c.quality, time: c.time, duration: c.duration, velocity: 0.8 }));
     // Por defecto se callan las pistas de acompañamiento (los acordes los pone el alumno);
     // con "Piano de la canción" suenan también, para canciones donde importa más la melodía.
     harmonyTracks = song.tracks.filter((t) => !t.isDrum && t.index !== melodyTrack).map((t) => t.index);
     player = new SongPlayer(song, { practiceTrack: -1, practice, mode, muted: settings.kcOriginalBacking ? [] : harmonyTracks, accGain: settings.kcOriginalBacking ? BACKING_GAIN : 1 });
     if (import.meta.env.DEV) window.__kc = { player, chords, get reader() { return reader; }, get voice() { return voice; } };
+    player.on('early', () => say(player.mode === 'tiempo' ? '⏩ ¡Muy pronto! Cambia de acorde cuando llegue a la línea' : '⏩ Te has adelantado: espera a que llegue a la línea'));
     player.on('end', () => {
       voice?.silence();
       audio.releaseAll();

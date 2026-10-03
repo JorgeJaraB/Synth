@@ -35,6 +35,10 @@ test('grados según los dedos', () => {
   assert.equal(degreeFromFingers(ext('ie')), 6); // 🤘
   assert.equal(degreeFromFingers(ext('pie')), 7); // 🤟
   assert.equal(degreeFromFingers(ext('')), 0); // puño
+  // Puño con el pulgar por fuera (sin cruzarlo): sigue siendo puño, no "1 dedo"
+  assert.equal(degreeFromFingers({ thumb: true, index: false, middle: false, ring: false, pinky: false }), 0);
+  // Con otro dedo levantado, el pulgar sí cuenta
+  assert.equal(degreeFromFingers({ thumb: true, index: true, middle: false, ring: false, pinky: false }), 2);
 });
 
 test('variante según los dedos de la mano derecha', () => {
