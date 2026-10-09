@@ -66,6 +66,7 @@ export function segmented(options, value, onChange) {
     );
   };
   render(value);
+  wrap.select = render; // marcar otra opción desde el código (sin llamar a onChange)
   return wrap;
 }
 

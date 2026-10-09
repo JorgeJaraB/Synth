@@ -101,3 +101,28 @@ test('bajar el dedo rápido da más volumen que despacio', () => {
   assert.ok(v2, 'el dedo lento también acaba sonando');
   assert.ok(v1.velocity > v2.velocity);
 });
+
+test('cerrar la mano no toca ninguna nota', () => {
+  const fp = new FingerPress();
+  run(fp, Array(10).fill(hand()));
+  // Todos los dedos bajan a la vez (la mano se cierra): no es una tecla
+  const fired = new Set();
+  for (const d of [10, 25, 40, 55]) {
+    for (const [id, st] of fp.update([hand({ index: d, middle: d, ring: d, pinky: d, thumb: d / 2 })], (fp._t += 1 / 30))) if (st.pressed) fired.add(id);
+  }
+  // Y con el puño detectado tampoco
+  const closed = { ...hand({ index: 60, middle: 60, ring: 60, pinky: 60 }), closed: true };
+  for (let i = 0; i < 5; i++) for (const [id, st] of fp.update([closed], (fp._t += 1 / 30))) if (st.pressed) fired.add(id);
+  // Al abrirla otra vez, tampoco suena nada
+  for (let i = 0; i < 5; i++) for (const [id, st] of fp.update([hand()], (fp._t += 1 / 30))) if (st.pressed) fired.add(id);
+  assert.deepEqual([...fired], []);
+});
+
+test('un dedo que se va bajando muy despacio no suena', () => {
+  const fp = new FingerPress();
+  run(fp, Array(10).fill(hand()));
+  let fired = false;
+  // 0,5 px por fotograma durante 2 s: es la mano que se relaja, no una pulsación
+  for (let i = 0; i < 60; i++) if (fp.update([hand({ index: i * 0.5 })], (fp._t += 1 / 30)).get('R:index').pressed) fired = true;
+  assert.equal(fired, false);
+});

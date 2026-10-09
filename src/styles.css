@@ -2016,3 +2016,42 @@ body.recording.clase .rec-float {
     display: none;
   }
 }
+
+/* Acordes y letra: acorde que suena al escuchar y botón de marcar el pulso */
+.sheet-chord {
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.sheet-chord.playing {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 3px #fff;
+}
+.tap-row {
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.tap-btn:active {
+  transform: scale(0.94);
+}
+.tap-info {
+  font-weight: 700;
+}
+/* Biblioteca: artista en la tarjeta y en la ficha */
+.song-artist {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--muted);
+  margin-top: -2px;
+}
+.artist-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 8px;
+  color: var(--muted);
+  font-weight: 800;
+}
+.artist-row input {
+  flex: 1;
+  min-width: 0;
+}

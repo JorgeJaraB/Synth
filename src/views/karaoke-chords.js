@@ -12,16 +12,29 @@ import { navigate } from '../router.js';
 import { CameraStage } from '../ui/camera-stage.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { handSvg } from '../ui/hand-svg.js';
-import { drawTiltGauge } from '../ui/tilt-gauge.js';
+import { drawTiltGauge, drawOctaveGauge, drawLock } from '../ui/tilt-gauge.js';
 import { h } from '../ui/dom.js';
 import { Transport, speedSelect, toggleButton, accompanimentControl, lyricsToggle, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
 const QUALITY_CODE = { mayor: 0, menor: 1, dim: 2 };
-/** El reproductor compara "notas": el código junta el grado y si es mayor o menor. */
-const chordCode = (degree, quality) => degree * 10 + QUALITY_CODE[quality];
+/**
+ * El reproductor compara "notas": el código junta el grado y si es mayor o menor. Con la mano
+ * recta en mayor (como Gesture Synth) no hay gesto de disminuido: vale con hacerlo menor.
+ */
+const chordCode = (degree, quality) => degree * 10 + QUALITY_CODE[quality === 'dim' && settings.chordStraight !== 'natural' ? 'menor' : quality];
 const QUALITY_WORD = { mayor: 'mayor', menor: 'menor', dim: 'disminuido' };
+/** Acordes con séptima (de las canciones de acordes): con cuántos dedos de la otra mano suenan igual. */
+const VOICING_HINT = { septima: '🤚 + 3 dedos', dominante: '🤚 + 4 dedos' };
 const NOW_X = 0.24;
+
+/** Qué hacer con la mano de los acordes para que suene mayor, menor o disminuido. */
+function qualityHint(q) {
+  const natural = settings.chordStraight === 'natural';
+  if (q === 'mayor') return natural ? 'inclina la mano hacia dentro o ponla recta' : 'pon la mano recta';
+  if (q === 'menor') return natural ? 'inclina la mano hacia fuera o ponla recta' : 'inclina la mano hacia fuera';
+  return natural ? 'pon la mano recta' : 'inclina la mano hacia fuera';
+}
 // Con el piano de la canción suenan muchas más notas a la vez: se bajan para no saturar.
 const BACKING_GAIN = 0.6;
 
@@ -107,7 +120,7 @@ export function mount(root, params) {
   const view = h('div.view.tutorial', toolbar, h('div.tutorial-body', stageWrap), transport.el);
   root.append(view);
 
-  const label = (c) => ({ text: chordSymbol(tonic, c.degree, c.quality, 'triada', settings.notation), color: noteColor(chordRoot(tonic, c.degree)) });
+  const label = (c) => ({ text: chordSymbol(tonic, c.degree, c.quality, c.voicing || 'triada', settings.notation), color: noteColor(chordRoot(tonic, c.degree)) });
 
   // ---------- Tarjeta "Ahora / Siguiente" ----------
   let shownKey = '';
@@ -124,7 +137,8 @@ export function mount(root, params) {
       c
         ? h('div.kc-chord', { class: big ? 'big' : '', style: { '--c': noteColor(chordRoot(tonic, c.degree)) } },
             h('div.kc-hand', { html: handSvg(HAND_SHAPES[c.degree - 1], { side: settings.chordLefty ? 'derecha' : 'izquierda', size: big ? 96 : 60 }) }),
-            h('div', h('b', romanFor(c.degree, c.quality)), h('span', chordSymbol(tonic, c.degree, c.quality, 'triada', settings.notation)), h('small.kc-quality', QUALITY_WORD[c.quality])),
+            h('div', h('b', romanFor(c.degree, c.quality)), h('span', chordSymbol(tonic, c.degree, c.quality, c.voicing || 'triada', settings.notation)), h('small.kc-quality', QUALITY_WORD[c.quality]),
+              big && VOICING_HINT[c.voicing] ? h('small.kc-quality', VOICING_HINT[c.voicing]) : null),
           )
         : null;
     nowCard.replaceChildren(
@@ -178,7 +192,7 @@ export function mount(root, params) {
         ctx.font = '900 22px Nunito, system-ui, sans-serif';
         ctx.fillText(romanFor(c.degree, c.quality), tx, top + 22);
         ctx.font = '800 15px Nunito, system-ui, sans-serif';
-        ctx.fillText(chordSymbol(tonic, c.degree, c.quality, 'triada', settings.notation) + (c.state === 'hit' ? (c.early ? ' ⏩' : ' ✓') : ''), tx, top + 46);
+        ctx.fillText(chordSymbol(tonic, c.degree, c.quality, c.voicing || 'triada', settings.notation) + (c.state === 'hit' ? (c.early ? ' ⏩' : ' ✓') : ''), tx, top + 46);
       }
     }
     ctx.fillStyle = 'rgba(255,200,60,0.95)';
@@ -197,7 +211,7 @@ export function mount(root, params) {
       const listening = player?.mode === 'escuchar';
       if (voice) {
         // En "Escuchar" suenan los acordes originales de la canción; si no, los del alumno.
-        if (stable && !listening) voice.setChord(chordNotes(tonic, stable.degree, stable.quality, stable.voicing));
+        if (stable && !listening) voice.setChord(chordNotes(tonic, stable.degree, stable.quality, stable.voicing, stable.octave));
         else voice.silence();
         voice.setVolume(stable && !listening ? r.volume : 0);
         voice.setBrightness(r.brightness);
@@ -214,8 +228,8 @@ export function mount(root, params) {
       drawLane(ctx, w);
       // Casi: el grado está bien pero falta cambiar entre mayor y menor
       const want = player?.expectedNow?.()[0] || player?.practice.find((c) => !c.state && c.time <= player.time + 0.05 && c.time + c.duration > player.time);
-      const nearMiss = !listening && stable && want && want.degree === stable.degree && want.quality !== stable.quality;
-      if (nearMiss) say(`↔️ ¡Casi! Este acorde es ${QUALITY_WORD[want.quality]}: ${want.quality === 'mayor' ? 'inclina la mano hacia dentro o ponla recta' : want.quality === 'menor' ? 'inclina la mano hacia fuera o ponla recta' : 'pon la mano recta'}`, 300);
+      const nearMiss = !listening && stable && want && want.degree === stable.degree && chordCode(want.degree, want.quality) !== code;
+      if (nearMiss) say(`↔️ ¡Casi! Este acorde es ${QUALITY_WORD[want.quality]}: ${qualityHint(want.quality)}`, 300);
       drawMessage(ctx, w, hh);
       if (r.chordInfo && r.chordInfo.degree >= 1) {
         const { pos, degree, tilt } = r.chordInfo;
@@ -228,10 +242,12 @@ export function mount(root, params) {
         ctx.font = '900 26px Nunito, system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(romanFor(degree, qualityFor(degree, tilt)), pos.x, pos.y + 45);
+        ctx.fillText(romanFor(degree, qualityFor(degree, tilt, settings.chordStraight)), pos.x, pos.y + 45);
         ctx.restore();
-        drawTiltGauge(ctx, pos.x, pos.y + 110, r.chordInfo.roll, r.chordInfo.onLeft, tilt);
-      }
+        drawTiltGauge(ctx, pos.x, pos.y + 110, r.chordInfo.roll, r.chordInfo.onLeft, tilt, settings.chordStraight);
+        if (r.locked) drawLock(ctx, pos.x + 34, pos.y + 10);
+      } else if (r.locked) drawLock(ctx, 70, 160);
+      if (r.exprInfo && settings.chordOctaveTurn && !r.exprInfo.muted) drawOctaveGauge(ctx, r.exprInfo.pos.x, r.exprInfo.pos.y + 60, r.exprInfo.roll, r.exprInfo.octave);
     },
     afterDraw() {
       if (!player) return;
@@ -257,7 +273,7 @@ export function mount(root, params) {
     keyEl.textContent = `🎼 ${SOLFEGE[res.tonic]} mayor (${LETTERS[res.tonic]})`;
     chords = res.chords;
     // Los acordes se guardan como "notas" (grado + calidad) para reutilizar el reproductor.
-    const practice = chords.map((c) => ({ midi: chordCode(c.degree, c.quality), degree: c.degree, quality: c.quality, time: c.time, duration: c.duration, velocity: 0.8 }));
+    const practice = chords.map((c) => ({ midi: chordCode(c.degree, c.quality), degree: c.degree, quality: c.quality, voicing: c.voicing || 'triada', time: c.time, duration: c.duration, velocity: 0.8 }));
     // Por defecto se callan las pistas de acompañamiento (los acordes los pone el alumno);
     // con "Piano de la canción" suenan también, para canciones donde importa más la melodía.
     harmonyTracks = song.tracks.filter((t) => !t.isDrum && t.index !== melodyTrack).map((t) => t.index);

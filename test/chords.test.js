@@ -1,18 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  chordNotes, chordSymbol, romanFor, degreeFromFingers, voicingFromFingers, handRoll, tiltSide, qualityFor, Stabilizer,
+  chordNotes, chordSymbol, romanFor, degreeFromFingers, voicingFromFingers, handRoll, tiltSide, qualityFor, octaveFromRoll, Stabilizer,
 } from '../src/core/chords.js';
 
 const ext = (s) => ({ thumb: s.includes('p'), index: s.includes('i'), middle: s.includes('m'), ring: s.includes('a'), pinky: s.includes('e') });
 
 test('acordes de Do mayor', () => {
-  // Posición abierta: fundamental, quinta, octava y décima (fundamental entre Sol3 y Fa#4)
+  // Posición abierta y registro de Gesture Synth: los grados suben desde la tónica y el VII baja
   assert.deepEqual(chordNotes(60, 1, 'mayor'), [60, 67, 72, 76]); // Do Sol Do Mi
   assert.deepEqual(chordNotes(48, 1, 'mayor'), [60, 67, 72, 76]); // la octava de la tónica no importa
   assert.deepEqual(chordNotes(60, 2, 'menor'), [62, 69, 74, 77]); // Re La Re Fa
   assert.deepEqual(chordNotes(60, 7, 'dim'), [59, 65, 71, 74]); // Si Fa Si Re
-  assert.deepEqual(chordNotes(60, 5, 'mayor', 'dominante'), [55, 59, 62, 65]); // Sol7
+  assert.deepEqual(chordNotes(60, 5, 'mayor', 'dominante'), [67, 71, 74, 77]); // Sol7, por encima del Do
+  assert.deepEqual(chordNotes(60, 6, 'mayor'), [69, 76, 81, 85]); // La mayor
+  // Sol mayor: la tónica baja a Sol3, como en Gesture Synth
+  assert.deepEqual(chordNotes(67, 1, 'mayor'), [55, 62, 67, 71]);
+  assert.deepEqual(chordNotes(65, 1, 'mayor'), [65, 72, 77, 81]); // Fa4
+  // Octava arriba / abajo
+  assert.deepEqual(chordNotes(60, 1, 'mayor', 'triada', 1), [72, 79, 84, 88]);
+  assert.deepEqual(chordNotes(60, 1, 'mayor', 'triada', -1), [48, 55, 60, 64]);
   assert.deepEqual(chordNotes(60, 1, 'mayor', 'inversion'), [64, 67, 72, 76]);
   assert.deepEqual(chordNotes(60, 1, 'mayor', 'septima'), [60, 64, 67, 71]); // Domaj7
 });
@@ -64,9 +71,20 @@ test('inclinación de la mano y calidad', () => {
   assert.equal(tiltSide(9, true, 'recta'), 'recta');
   assert.equal(tiltSide(-14, true, 'recta'), 'fuera'); // basta con inclinarla un poco
   assert.equal(tiltSide(-35, true, 'dentro'), 'fuera'); // de un lado al otro directamente
-  assert.equal(qualityFor(2, 'recta'), 'menor');
+  assert.equal(qualityFor(2, 'recta'), 'mayor'); // como en Gesture Synth
+  assert.equal(qualityFor(2, 'recta', 'natural'), 'menor');
+  assert.equal(qualityFor(7, 'recta', 'natural'), 'dim');
   assert.equal(qualityFor(2, 'dentro'), 'mayor');
   assert.equal(qualityFor(1, 'fuera'), 'menor');
+});
+
+test('girar la mano de expresión cambia de octava, con histéresis', () => {
+  assert.equal(octaveFromRoll(0), 0);
+  assert.equal(octaveFromRoll(30), 1);
+  assert.equal(octaveFromRoll(15, 1), 1); // sigue arriba hasta volver casi a recta
+  assert.equal(octaveFromRoll(15, 0), 0);
+  assert.equal(octaveFromRoll(5, 1), 0);
+  assert.equal(octaveFromRoll(-30, 1), -1);
 });
 
 test('el estabilizador espera a que el gesto se mantenga', () => {

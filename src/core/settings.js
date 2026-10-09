@@ -26,6 +26,9 @@ export const DEFAULTS = {
   chordKey: 0, // tonalidad: 0 = Do, 2 = Re, 7 = Sol...
   chordInstrument: 'limpio', // ver CHORD_WAVES e INSTRUMENTS en audio.js
   chordNeedRight: true, // los acordes se callan al quitar la mano derecha (como en Gesture Synth)
+  chordStraight: 'mayor', // mano recta: 'mayor' en todos los grados (como Gesture Synth) | 'natural' (el de la escala)
+  chordOctaveTurn: true, // girar la mano derecha sube o baja una octava
+  chordThumbLock: false, // experimento: sacar el pulgar derecho fija el acorde (candado)
   chordLefty: false, // zurdo/a: la mano derecha elige el acorde
   chordArpeggio: false,
   chordProgression: 'ninguna',

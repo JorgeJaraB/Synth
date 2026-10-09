@@ -2,7 +2,7 @@
 // comprueba con la cámara que se hace bien y pasa sola al siguiente paso.
 import { audio } from '../core/audio.js';
 import { settings } from '../core/settings.js';
-import { chordSymbol, romanFor, NATURAL_QUALITY, chordRoot } from '../core/chords.js';
+import { chordSymbol, romanFor, restQuality, chordRoot } from '../core/chords.js';
 import { noteColor } from '../core/notes.js';
 import { confetti } from '../ui/transport.js';
 import { handSvg } from '../ui/hand-svg.js';
@@ -42,7 +42,9 @@ export class ChordTutorial {
   buildSteps() {
     const chordSide = settings.chordLefty ? 'derecha' : 'izquierda';
     const exprSide = settings.chordLefty ? 'izquierda' : 'derecha';
-    const name = (d, q = NATURAL_QUALITY[d - 1], v = 'triada') => chordSymbol(this.tonic(), d, q, v, settings.notation);
+    const natural = settings.chordStraight === 'natural';
+    const rest = (d) => restQuality(d, settings.chordStraight);
+    const name = (d, q = rest(d), v = 'triada') => chordSymbol(this.tonic(), d, q, v, settings.notation);
     const hand = (fingers, opts = {}) => ({ fingers, side: chordSide, ...opts });
     const steps = [
       {
@@ -62,7 +64,7 @@ export class ChordTutorial {
       const d = i + 1;
       steps.push({
         hand: hand(f),
-        title: `Acorde ${romanFor(d, NATURAL_QUALITY[i])} · ${name(d)}`,
+        title: `Acorde ${romanFor(d, rest(d))} · ${name(d)}`,
         text: SHAPE_TEXT[i] + ` Así suena el acorde <b>${name(d)}</b>.` + (d === 1 ? ' Mantén la mano recta.' : ''),
         check: (s) => s.chordPresent && s.degree === d && s.tilt === 'recta',
         color: noteColor(chordRoot(this.tonic(), d)),
@@ -75,18 +77,29 @@ export class ChordTutorial {
         text: 'Cierra el puño para que deje de sonar. Así puedes hacer pausas.',
         check: (s) => s.chordPresent && s.degree === 0,
       },
-      {
-        hand: hand('im', { tilt: 30 }),
-        title: 'Inclinar hacia dentro = mayor',
-        text: `Con <b>2 dedos</b> (${name(2)}), inclina la mano hacia el <b>centro de la pantalla</b>. El acorde menor se vuelve mayor: <b>${name(2, 'mayor')}</b>.`,
-        check: (s) => s.chordPresent && s.degree === 2 && s.tilt === 'dentro',
-      },
-      {
-        hand: hand('i', { tilt: -30 }),
-        title: 'Inclinar hacia fuera = menor',
-        text: `Con <b>1 dedo</b> (${name(1)}), inclina la mano hacia <b>fuera</b>. El acorde mayor se vuelve menor: <b>${name(1, 'menor')}</b>.`,
-        check: (s) => s.chordPresent && s.degree === 1 && s.tilt === 'fuera',
-      },
+      ...(natural
+        ? [
+            {
+              hand: hand('im', { tilt: 30 }),
+              title: 'Inclinar hacia dentro = mayor',
+              text: `Con <b>2 dedos</b> (${name(2)}), inclina la mano hacia el <b>centro de la pantalla</b>. El acorde menor se vuelve mayor: <b>${name(2, 'mayor')}</b>.`,
+              check: (s) => s.chordPresent && s.degree === 2 && s.tilt === 'dentro',
+            },
+            {
+              hand: hand('i', { tilt: -30 }),
+              title: 'Inclinar hacia fuera = menor',
+              text: `Con <b>1 dedo</b> (${name(1)}), inclina la mano hacia <b>fuera</b>. El acorde mayor se vuelve menor: <b>${name(1, 'menor')}</b>.`,
+              check: (s) => s.chordPresent && s.degree === 1 && s.tilt === 'fuera',
+            },
+          ]
+        : [
+            {
+              hand: hand('im', { tilt: -30 }),
+              title: 'Inclinar hacia fuera = menor',
+              text: `Con la mano recta todos los acordes son mayores. Con <b>2 dedos</b> (${name(2)}), inclina la mano hacia <b>fuera</b> y se vuelve menor: <b>${name(2, 'menor')}</b>.`,
+              check: (s) => s.chordPresent && s.degree === 2 && s.tilt === 'fuera',
+            },
+          ]),
       {
         hand: { fingers: 'i', side: exprSide },
         title: `Ahora la mano ${exprSide}`,
@@ -105,18 +118,31 @@ export class ChordTutorial {
         progress: (m) => `${m.high ? '✅' : '⬜'} Fuerte   ${m.low ? '✅' : '⬜'} Flojito`,
         hold: 0,
       },
-      {
-        hand: { fingers: 'i', side: exprSide, tilt: 30 },
-        title: 'Inclinar = brillo',
-        text: `Inclina la mano ${exprSide} hacia un lado y hacia el otro: el sonido se vuelve más <b>brillante</b> o más <b>apagado</b>.`,
-        check: (s, m) => {
-          if (s.exprPresent && s.brightness > 0.8) m.bright = true;
-          if (s.exprPresent && s.brightness < 0.3) m.dark = true;
-          return m.bright && m.dark;
-        },
-        progress: (m) => `${m.bright ? '✅' : '⬜'} Brillante   ${m.dark ? '✅' : '⬜'} Apagado`,
-        hold: 0,
-      },
+      settings.chordOctaveTurn
+        ? {
+            hand: { fingers: 'i', side: exprSide, tilt: 30 },
+            title: 'Girar = octava',
+            text: `Gira la mano ${exprSide} hacia un lado y hacia el otro, como el botón del volumen: el acorde suena una <b>octava más agudo</b> o <b>más grave</b>. Recta, vuelve a su sitio.`,
+            check: (s, m) => {
+              if (s.exprPresent && s.octave > 0) m.up = true;
+              if (s.exprPresent && s.octave < 0) m.down = true;
+              return m.up && m.down;
+            },
+            progress: (m) => `${m.up ? '✅' : '⬜'} Más agudo   ${m.down ? '✅' : '⬜'} Más grave`,
+            hold: 0,
+          }
+        : {
+            hand: { fingers: 'i', side: exprSide, tilt: 30 },
+            title: 'Inclinar = brillo',
+            text: `Inclina la mano ${exprSide} hacia un lado y hacia el otro: el sonido se vuelve más <b>brillante</b> o más <b>apagado</b>.`,
+            check: (s, m) => {
+              if (s.exprPresent && s.brightness > 0.8) m.bright = true;
+              if (s.exprPresent && s.brightness < 0.3) m.dark = true;
+              return m.bright && m.dark;
+            },
+            progress: (m) => `${m.bright ? '✅' : '⬜'} Brillante   ${m.dark ? '✅' : '⬜'} Apagado`,
+            hold: 0,
+          },
       {
         hand: { fingers: 'imae', side: exprSide },
         title: 'Dedos de la otra mano = variante',
@@ -131,7 +157,7 @@ export class ChordTutorial {
       },
       {
         hand: hand('i'),
-        title: `¡Reto final! ${PROG.map((d) => romanFor(d, NATURAL_QUALITY[d - 1])).join(' – ')}`,
+        title: `¡Reto final! ${PROG.map((d) => romanFor(d, rest(d))).join(' – ')}`,
         text: `Toca esta progresión, la de miles de canciones: <b>${PROG.map((d) => name(d)).join(' → ')}</b>. Mantén cada acorde un momento.`,
         check: (s, m) => {
           m.step ??= 0;

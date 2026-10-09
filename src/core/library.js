@@ -4,6 +4,7 @@
 // en el navegador (desarrollo) se usan las canciones de ejemplo.
 import { parseSong } from './midi-parse.js';
 import { parseMusicXmlFile } from './musicxml.js';
+import { moveSongInfo } from './song-info.js';
 
 /** Lee cualquier formato admitido: MIDI/KAR o MusicXML. */
 export async function parseAny(bytes, fileName) {
@@ -92,10 +93,44 @@ export async function importFiles(files, category = '') {
   return { added, rejected };
 }
 
+/** ¿La hizo la app? (los .kar de "Crear canción" llevan una pista llamada "Melodia") */
+export const isAppSong = (name, song) => /\.kar$/i.test(name) && (!!song.editSource || song.tracks.some((t) => t.name === 'Melodia'));
+
+/**
+ * Guarda una canción hecha en "Crear canción". Si se está editando una (editing = su ruta),
+ * se sobrescribe ese mismo archivo y, si ha cambiado el título, se le cambia el nombre.
+ * Devuelve la ruta con la que queda.
+ */
+export async function saveCreatedSong(bytes, title, editing = null) {
+  if (!editing || !/\.kar$/i.test(editing)) {
+    const { added } = await importFiles([new File([bytes], title + '.kar')]);
+    if (!added.length) throw new Error('No se pudo guardar');
+    return added[0];
+  }
+  const slash = editing.lastIndexOf('/');
+  const dir = slash >= 0 ? editing.slice(0, slash) : '';
+  const base = editing.slice(slash + 1).replace(SONG_RE, '');
+  const { added } = await importFiles([new File([bytes], base + '.kar')], dir);
+  if (!added.length) throw new Error('No se pudo guardar');
+  let rel = added[0];
+  if (title && title !== base) {
+    try {
+      rel = await renameSong(rel, title);
+    } catch {
+      /* ya hay otra con ese nombre: se queda con el de antes */
+    }
+  }
+  return rel;
+}
+
 /** Cambia el nombre de una canción. Devuelve su nueva ruta. */
 export async function renameSong(name, newBase) {
   cache.delete(name);
-  if (api) return api.renameSong(name, newBase);
+  if (api) {
+    const rel = await api.renameSong(name, newBase);
+    moveSongInfo(name, rel);
+    return rel;
+  }
   // Versión web (pruebas): solo las canciones añadidas en esta sesión
   if (!sessionSongs.has(name)) throw new Error('Solo en la app de escritorio');
   const ext = name.match(/\.[^.]+$/)[0];
@@ -103,12 +138,14 @@ export async function renameSong(name, newBase) {
   if (sessionSongs.has(rel)) throw new Error('Ya existe');
   sessionSongs.set(rel, sessionSongs.get(name));
   sessionSongs.delete(name);
+  moveSongInfo(name, rel);
   return rel;
 }
 
 /** Envía la canción a la papelera de Windows (se puede recuperar). */
 export async function removeSong(name) {
   cache.delete(name);
+  moveSongInfo(name, null);
   if (api) return api.trashSong(name);
   sessionSongs.delete(name);
 }
