@@ -47,3 +47,20 @@ test('el ejemplo genera un .kar que la app lee con letra y acordes', () => {
   assert.equal(s.tracks.length, 2); // melodía + acompañamiento
   assert.equal(s.tracks[s.melodyTrack].notes.length, 28);
 });
+
+test('el artista y lo escrito en el editor viajan dentro del .kar', async () => {
+  const { buildKar, parseSongText } = await import('../src/core/song-text.js');
+  const { parseSong } = await import('../src/core/midi-parse.js');
+  const src = { kind: 'notas', title: 'Los pollitos', artist: 'Canción popular', bpm: '100', beatsPerBar: 4, notesText: 'Do Re Mi Fa Sol La Si Do5', lyricsText: 'Los po-lli-tos di-cen pí-o', chordsText: '' };
+  const p = parseSongText(src);
+  const song = parseSong(buildKar({ title: 'Los pollitos', artist: 'Canción popular', notes: p.notes, syllables: p.syllables, source: src }));
+  assert.equal(song.title, 'Los pollitos');
+  assert.equal(song.artist, 'Canción popular');
+  assert.deepEqual(song.editSource, src);
+  // Ni el artista ni el texto guardado se cuelan en la letra
+  assert.equal(song.lines.map((l) => l.syllables.map((s) => s.text).join('')).join(' ').trim(), 'Los pollitos dicen pío');
+  // Sin letra también se guarda
+  const sin = parseSong(buildKar({ title: 'X', artist: 'Y', notes: p.notes, source: src }));
+  assert.equal(sin.artist, 'Y');
+  assert.equal(sin.editSource.notesText, 'Do Re Mi Fa Sol La Si Do5');
+});

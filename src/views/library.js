@@ -1,8 +1,9 @@
 // Biblioteca de canciones: lista la carpeta, permite añadir y elegir cómo practicar.
 import {
   listSongs, loadSong, importFiles, removeSong, renameSong, onSongsChanged, openSongsFolder, songsFolderPath,
-  isDesktop, displayName, EXAMPLES_CATEGORY,
+  isDesktop, displayName, EXAMPLES_CATEGORY, isAppSong,
 } from '../core/library.js';
+import { songArtist, setArtist } from '../core/song-info.js';
 import { navigate } from '../router.js';
 import { noteName } from '../core/notes.js';
 import { settings } from '../core/settings.js';
@@ -50,6 +51,8 @@ export function howToAddCard(folderPath, onClose) {
 }
 
 export function mount(root, params = {}) {
+  // Canciones que se acaban de guardar o editar: hay que volver a leer sus datos.
+  for (const n of params.changed || []) if (n) meta.delete(n);
   let songs = [];
   let alive = true;
   let category = lastCategory;
@@ -192,7 +195,7 @@ export function mount(root, params = {}) {
       metaStatus.textContent = `Leyendo canciones… ${done}/${missing.length}`;
       try {
         const song = await loadSong(x.name);
-        meta.set(x.name, { hasLyrics: song.hasLyrics, duration: song.duration });
+        meta.set(x.name, { hasLyrics: song.hasLyrics, duration: song.duration, artist: songArtist(x.name, song) });
       } catch {
         meta.set(x.name, { error: true });
       }
@@ -217,6 +220,7 @@ export function mount(root, params = {}) {
     },
       h('div.song-icon', score ? '📄' : kar ? '🎤' : '🎼'),
       h('div.song-name', displayName(s.name)),
+      meta.get(s.name)?.artist ? h('div.song-artist', meta.get(s.name).artist) : null,
       h('div.song-type', cardInfo(s, score, kar)),
     );
     const playing = preview?.name === s.name;
@@ -324,7 +328,8 @@ export function mount(root, params = {}) {
   function renderList() {
     const pending = [];
     let visible = songs.filter((s) => {
-      if (!((category === ALL || s.category === category) && (!query || displayName(s.name).toLowerCase().includes(query)))) return false;
+      const text = (displayName(s.name) + ' ' + (meta.get(s.name)?.artist || '')).toLowerCase();
+      if (!((category === ALL || s.category === category) && (!query || text.includes(query)))) return false;
       const ok = passes(s);
       if (ok === null) pending.push(s);
       return ok === true;
@@ -402,6 +407,7 @@ export function mount(root, params = {}) {
         h('button.btn.icon.panel-close', { title: 'Cerrar', onclick: () => detail.classList.remove('open') }, '✕'),
         h('h2', displayName(name)),
         song.title.toLowerCase() !== displayName(name).toLowerCase() ? h('p.muted.song-subtitle', song.title) : null,
+        artistRow(name, song),
         h('div.song-meta',
           h('span', '⏱️ ', formatTime(song.duration)),
           h('span', '🥁 ', song.bpm, ' ppm'),
@@ -414,6 +420,9 @@ export function mount(root, params = {}) {
           h('button.mode-btn', { onclick: () => go('karaoke') }, h('span.mode-emoji', '🎤'), h('b', 'Karaoke'), h('small', song.hasLyrics ? 'Letra grande con bolita' : 'Sin letra: se cantan los nombres de las notas')),
           h('button.mode-btn', { onclick: () => go('karaoke-chords') }, h('span.mode-emoji', '🤟'), h('b', 'Karaoke de acordes'), h('small', 'Pon los acordes con las manos mientras suena la canción')),
         ),
+        isAppSong(name, song)
+          ? h('button.btn.edit-song-btn', { onclick: () => navigate('song-editor', { edit: name }) }, '✏️ Editar la canción')
+          : h('button.btn.edit-song-btn', { title: 'Se abre en "Crear canción" para retocarla y guardarla como una canción nueva', onclick: () => navigate('song-editor', { edit: name }) }, '✏️ Abrir en el editor (copia)'),
         playable.length > 1
           ? h('details.advanced',
               h('summary', 'Opciones avanzadas'),
@@ -425,6 +434,43 @@ export function mount(root, params = {}) {
         removeButton(name),
       ].filter(Boolean),
     );
+  }
+
+  /** Artista de la canción, que se puede escribir o corregir (se guarda en este equipo). */
+  function artistRow(name, song) {
+    const row = h('div.artist-row');
+    const show = () => {
+      const a = songArtist(name, song);
+      row.replaceChildren(
+        h('span', '🎤 ', a || h('i', 'Sin artista')),
+        h('button.btn.icon.small', { title: a ? 'Cambiar el artista' : 'Escribir el artista', onclick: edit }, '✏️'),
+      );
+    };
+    const edit = () => {
+      const input = h('input.editor-input', { type: 'text', value: songArtist(name, song), placeholder: 'Artista o grupo', maxLength: 80 });
+      let done = false;
+      const finish = (ok) => {
+        if (done) return;
+        done = true;
+        if (ok) {
+          setArtist(name, input.value);
+          const m = meta.get(name);
+          if (m) m.artist = input.value.trim();
+          renderList();
+        }
+        show();
+      };
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') finish(true);
+        if (e.key === 'Escape') finish(false);
+      });
+      input.addEventListener('blur', () => finish(true));
+      row.replaceChildren(h('span', '🎤'), input);
+      input.focus();
+      input.select();
+    };
+    show();
+    return row;
   }
 
   function removeButton(name) {

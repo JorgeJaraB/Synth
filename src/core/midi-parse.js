@@ -41,6 +41,8 @@ function extractLyrics(raw, ticksToSeconds) {
   const lyricEv = [];
   const textEv = [];
   let title = '';
+  let artist = '';
+  let source = null;
   // Textos que no son letra: nombres de pistas, título… (muchos MIDI los repiten como texto)
   const noise = new Set();
   const norm = (t) => t.trim().toLowerCase();
@@ -54,7 +56,16 @@ function extractLyrics(raw, ticksToSeconds) {
       if (ev.type !== 'lyrics' && ev.type !== 'text') continue;
       const text = decodeMidiText(ev.text);
       if (ev.type === 'text' && text.startsWith('@')) {
-        if (text.startsWith('@T') && !title) title = text.slice(2).trim();
+        if (text.startsWith('@T')) {
+          if (!title) title = text.slice(2).trim();
+          else if (!artist) artist = text.slice(2).trim();
+        } else if (text.startsWith('@SYNTH')) {
+          try {
+            source = JSON.parse(decodeURIComponent(text.slice(6)));
+          } catch {
+            /* dañado: se ignora */
+          }
+        }
         continue;
       }
       (ev.type === 'lyrics' ? lyricEv : textEv).push({ tick, text });
@@ -105,7 +116,7 @@ function extractLyrics(raw, ticksToSeconds) {
     const next = lines[i + 1];
     l.end = next ? next.start : l.syllables[l.syllables.length - 1].time + 2;
   });
-  return { lines, title };
+  return { lines, title, artist, source };
 }
 
 function polyphonyRatio(notes) {
@@ -192,7 +203,7 @@ export function parseSong(data, fileName = 'Canción') {
   const midi = new Midi(bytes);
   const raw = parseMidi(bytes);
   const t2s = (tick) => midi.header.ticksToSeconds(tick);
-  const { lines, title: karTitle } = extractLyrics(raw, t2s);
+  const { lines, title: karTitle, artist, source } = extractLyrics(raw, t2s);
   const { chordMarks, keyMark } = extractMarks(raw, t2s);
 
   const tracks = [];
@@ -241,6 +252,8 @@ export function parseSong(data, fileName = 'Canción') {
 
   return {
     title,
+    artist, // segundo "@T" de los .kar
+    editSource: source, // canciones creadas en la app: lo que se escribió en el editor
     fileName,
     duration,
     bpm: Math.round(bpm),

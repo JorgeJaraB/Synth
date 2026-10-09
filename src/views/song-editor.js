@@ -1,7 +1,7 @@
 // Crear canción: el maestro escribe las notas y la letra, la escucha y la guarda en la biblioteca.
 import { audio } from '../core/audio.js';
 import { settings } from '../core/settings.js';
-import { importFiles, parseAny } from '../core/library.js';
+import { parseAny, loadSong, saveCreatedSong, displayName, isAppSong } from '../core/library.js';
 import { songToText, noteToken } from '../core/song-import.js';
 import { TouchKeyboard } from '../ui/keyboard.js';
 import { parseSongText, buildKar, EXAMPLE_SONG } from '../core/song-text.js';
@@ -14,13 +14,17 @@ const DRAFT_KEY = 'synth-manos-borrador-cancion';
 let lastTab = 'notas';
 
 export function mount(root, params = {}) {
+  // Editar una canción ya guardada (params.edit = su ruta): se sobrescribe al guardar y no se
+  // toca el borrador de la canción nueva.
+  let editing = params.edit || null;
   let draft = {};
   try {
-    draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
+    if (!editing) draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
   } catch {
     /* sin borrador */
   }
   const title = h('input.editor-input', { type: 'text', placeholder: 'Ej.: Los pollitos', value: draft.title || '', maxLength: 80 });
+  const artist = h('input.editor-input', { type: 'text', placeholder: 'Opcional. Ej.: Canción popular', value: draft.artist || '', maxLength: 80 });
   const bpm = h('input.editor-input.small', { type: 'number', min: 40, max: 220, value: draft.bpm || 100 });
   const meter = h('select', [4, 3, 2].map((b) => h('option', { value: b, selected: Number(draft.beatsPerBar || 4) === b }, `${b}/4`)));
   const notesTa = h('textarea.editor-ta', { rows: 5, placeholder: 'Do Do Sol Sol | La La Sol- | Fa Fa Mi Mi | Re Re Do-', value: draft.notesText || '' });
@@ -98,7 +102,7 @@ export function mount(root, params = {}) {
   };
   padLoop();
 
-  const sheet = chordSheetPanel();
+  const sheet = chordSheetPanel({ editing: () => editing });
   // Abrir una partitura o un MIDI y pasarlo al formato del editor
   const fileIn = h('input', {
     type: 'file', accept: '.mid,.midi,.kar,.musicxml,.mxl,.xml', style: { display: 'none' },
@@ -109,13 +113,7 @@ export function mount(root, params = {}) {
       try {
         const song = await parseAny(new Uint8Array(await f.arrayBuffer()), f.name);
         const r = songToText(song, { notation: settings.notation === 'letras' ? 'letras' : 'solfeo' });
-        title.value = r.title || f.name.replace(/\.[^.]+$/, '');
-        bpm.value = r.bpm;
-        meter.value = r.beatsPerBar;
-        notesTa.value = r.notesText;
-        lyricsTa.value = r.lyricsText;
-        chordsIn.value = r.chordsText;
-        refresh();
+        fillNotes({ ...r, title: r.title || f.name.replace(/\.[^.]+$/, ''), artist: song.artist });
         toast(r.warnings.length ? '⚠️ ' + r.warnings.join(' ') : '✅ Canción abierta: ya puedes retocarla', 4500);
       } catch (e) {
         console.error(e);
@@ -129,25 +127,29 @@ export function mount(root, params = {}) {
     playBtn, saveBtn, fileIn);
   const sheetActions = h('div.row.editor-actions', ...sheet.actions);
   let notesBody;
+  let heading;
+  let tabs;
   function showTab(t) {
     lastTab = t;
+    tabs?.select(t);
     notesBody.hidden = notesActions.hidden = t !== 'notas';
     sheet.el.hidden = sheetActions.hidden = t !== 'acordes';
     if (t !== 'notas') stop();
+    if (t !== 'acordes') sheet.stop();
   }
   const view = h(
     'div.view.editor-view',
     h('div.view-toolbar.wrap',
       h('button.btn.icon', { title: 'Volver a canciones', onclick: () => navigate('library') }, '←'),
-      h('h2', '✏️ Crear canción'),
-      segmented([['notas', '✏️ Notas y letra'], ['acordes', '🎸 Acordes y letra (pegar)']], params.tab || lastTab, showTab),
+      (heading = h('h2', editing ? '✏️ Editar canción' : '✏️ Crear canción')),
+      (tabs = segmented([['notas', '✏️ Notas y letra'], ['acordes', '🎸 Acordes y letra (pegar)']], params.tab || lastTab, showTab)),
       h('div.spacer'),
       notesActions,
       sheetActions,
     ),
     (notesBody = h('div.editor-body',
       h('div.editor-form',
-        h('label.field', h('span.field-label', 'Título'), title),
+        h('div.field-row', h('label.field', h('span.field-label', 'Título'), title), h('label.field', h('span.field-label', 'Artista'), artist)),
         h('div.field-row', h('label.field', h('span.field-label', 'Velocidad (pulsos por minuto)'), bpm), h('label.field', h('span.field-label', 'Compás'), meter)),
         h('label.field', h('span.field-label', '🎵 Notas'), notesTa),
         h('label.field', h('span.field-label', '🎤 Letra (opcional)'), lyricsTa),
@@ -165,7 +167,7 @@ export function mount(root, params = {}) {
     const beatsPerBar = Number(meter.value);
     parsed = parseSongText({ notesText: notesTa.value, lyricsText: lyricsTa.value, chordsText: chordsIn.value, beatsPerBar });
     try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify({ title: title.value, bpm: bpm.value, beatsPerBar, notesText: notesTa.value, lyricsText: lyricsTa.value, chordsText: chordsIn.value }));
+      if (!editing) localStorage.setItem(DRAFT_KEY, JSON.stringify(notesSource()));
     } catch {
       /* sin almacenamiento */
     }
@@ -201,7 +203,22 @@ export function mount(root, params = {}) {
     preview.replaceChildren(...(rows.length ? rows.map((r) => h('div.ed-row', r)) : [h('p.muted', 'Escribe las notas a la izquierda y aquí verás cómo queda.')]));
     saveBtn.disabled = !parsed.notes.length || parsed.errors.length > 0;
   }
-  for (const el of [title, bpm, meter, notesTa, lyricsTa, chordsIn]) el.addEventListener('input', refresh);
+  for (const el of [title, artist, bpm, meter, notesTa, lyricsTa, chordsIn]) el.addEventListener('input', refresh);
+
+  /** Lo escrito en la pestaña de notas (se guarda dentro de la canción para poder editarla). */
+  function notesSource() {
+    return { kind: 'notas', title: title.value, artist: artist.value, bpm: bpm.value, beatsPerBar: Number(meter.value), notesText: notesTa.value, lyricsText: lyricsTa.value, chordsText: chordsIn.value };
+  }
+  function fillNotes(src) {
+    title.value = src.title || '';
+    artist.value = src.artist || '';
+    bpm.value = src.bpm || 100;
+    meter.value = src.beatsPerBar || 4;
+    notesTa.value = src.notesText || '';
+    lyricsTa.value = src.lyricsText || '';
+    chordsIn.value = src.chordsText || '';
+    refresh();
+  }
   meter.addEventListener('change', refresh);
 
   function loadExample() {
@@ -262,33 +279,71 @@ export function mount(root, params = {}) {
     const name = (title.value.trim() || 'Mi canción').replace(/[<>:"/\\|?*]/g, '').slice(0, 60);
     const bytes = buildKar({
       title: name,
+      artist: artist.value.trim(),
+      source: notesSource(),
       bpm: Number(bpm.value || 100),
       beatsPerBar: Number(meter.value),
       notes: parsed.notes,
       syllables: parsed.syllables,
       chords: parsed.chords,
     });
-    const { added } = await importFiles([new File([bytes], name + '.kar')]);
-    if (!added.length) {
+    let rel;
+    try {
+      rel = await saveCreatedSong(bytes, name, editing);
+    } catch {
       toast('⚠️ No se pudo guardar la canción');
       return;
     }
     stop();
     try {
-      localStorage.removeItem(DRAFT_KEY);
+      if (!editing) localStorage.removeItem(DRAFT_KEY);
     } catch {
       /* nada */
     }
-    toast(`✅ "${name}" guardada en tus canciones`);
-    navigate('library', { select: added[0] });
+    toast(editing ? `✅ "${name}" guardada con los cambios` : `✅ "${name}" guardada en tus canciones`);
+    navigate('library', { select: rel, changed: [editing, rel] });
   }
 
   refresh();
   showTab(params.tab || lastTab);
+
+  // Editar una canción guardada: se abre con lo que se escribió al crearla. Si no lo trae
+  // (canciones de antes o de otros sitios), se pasa al formato del editor y se guarda aparte.
+  if (editing) {
+    (async () => {
+      let song;
+      try {
+        song = await loadSong(editing);
+      } catch {
+        toast('⚠️ No se pudo abrir la canción');
+        return;
+      }
+      const src = song.editSource;
+      if (src?.kind === 'acordes') {
+        sheet.load(src);
+        showTab('acordes');
+      } else if (src?.kind === 'notas') {
+        fillNotes(src);
+        showTab('notas');
+      } else {
+        const r = songToText(song, { notation: settings.notation === 'letras' ? 'letras' : 'solfeo' });
+        fillNotes({ ...r, title: r.title || displayName(editing), artist: song.artist });
+        showTab('notas');
+        // Solo se sobrescriben las canciones hechas con la app (de antes de guardar lo escrito);
+        // un MIDI, una partitura o un karaoke descargado se guardan como canción nueva.
+        if (!isAppSong(editing, song)) {
+          editing = null;
+          heading.textContent = '✏️ Crear canción';
+          toast('ℹ️ Se guardará como una canción nueva; el archivo original no se toca.', 4500);
+        } else if (r.warnings.length) toast('⚠️ ' + r.warnings.join(' '), 4500);
+      }
+    })();
+  }
   return () => {
     padAlive = false;
     pad.destroy();
     stop();
+    sheet.stop();
     view.remove();
   };
 }

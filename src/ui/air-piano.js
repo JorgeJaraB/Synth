@@ -82,7 +82,7 @@ export class AirPiano {
     // Para las notas que caen (tutorial): carriles alineados con el borde lejano del teclado.
     this.layout = keyLayout(this.low, this.high, g.cx - g.wTop / 2, g.top, g.wTop, g.h);
     this.press.setSensitivity(settings.airPianoSensitivity);
-    const pts = hands.map((hand) => ({ key: hand.key, points: hand.landmarks.map((p) => stage.toScreen(p)) }));
+    const pts = hands.map((hand) => ({ key: hand.key, closed: !!hand.closed, points: hand.landmarks.map((p) => stage.toScreen(p)) }));
     const res = this.press.update(pts, performance.now() / 1000);
     const seen = new Set();
     this.tips = [];

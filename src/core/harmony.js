@@ -1,6 +1,8 @@
 // Análisis armónico de una canción MIDI: tonalidad y acordes (para el karaoke de acordes).
 // Los MIDI no traen los acordes escritos, así que se deducen de las notas.
 
+import { parseChordName, voicingForSeventh } from './chord-sheet.js';
+
 const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
 const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
 const MAJOR_STEPS = [0, 2, 4, 5, 7, 9, 11];
@@ -80,13 +82,10 @@ function bestDegree(w, tonic) {
   return best.degree;
 }
 
-const PCS = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-/** "F#m" → { root: 6, quality: 'menor' } */
+/** "F#m" → { root: 6, quality: 'menor', seventh: null }; "Am7" → { …, seventh: '7' } */
 function markChord(name) {
-  const m = name.match(/^([A-G])(#|b)?(m|dim)?$/);
-  if (!m) return null;
-  const root = (PCS[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) + 12) % 12;
-  return { root, quality: m[3] === 'm' ? 'menor' : m[3] === 'dim' ? 'dim' : 'mayor' };
+  const c = parseChordName(name);
+  return c ? { root: c.root, quality: c.quality, seventh: c.seventh } : null;
 }
 
 /**
@@ -102,7 +101,7 @@ function timelineFromMarks(song, opts) {
   marks.forEach((m, i) => {
     const end = marks[i + 1]?.time ?? song.duration;
     const degree = STEPS.indexOf((m.root - tonic + 12) % 12) + 1;
-    if (degree >= 1 && end > m.time) chords.push({ time: m.time, duration: end - m.time, degree, quality: m.quality });
+    if (degree >= 1 && end > m.time) chords.push({ time: m.time, duration: end - m.time, degree, quality: m.quality, voicing: voicingForSeventh(m.quality, m.seventh) });
   });
   return { tonic, chords };
 }

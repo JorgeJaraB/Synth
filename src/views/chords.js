@@ -4,7 +4,7 @@ import { audio, INSTRUMENTS, CHORD_WAVES } from '../core/audio.js';
 import { settings, onSettingsChange } from '../core/settings.js';
 import { noteColor, noteName, SOLFEGE, LETTERS } from '../core/notes.js';
 import {
-  chordNotes, chordSymbol, chordLongName, chordRoot, romanFor, qualityFor, NATURAL_QUALITY, PROGRESSIONS, voicingLabel,
+  chordNotes, chordSymbol, chordLongName, chordRoot, romanFor, qualityFor, restQuality, NATURAL_QUALITY, PROGRESSIONS, voicingLabel,
 } from '../core/chords.js';
 import { ChordHandReader } from '../core/chord-hands.js';
 import { CameraStage } from '../ui/camera-stage.js';
@@ -13,7 +13,7 @@ import { h, settingSelect, settingRange, settingToggle, panelToggle, INSTRUMENT_
 import { drawWave } from './synth.js';
 import { ChordTutorial } from './chords-tutorial.js';
 import { handSvg } from '../ui/hand-svg.js';
-import { drawTiltGauge } from '../ui/tilt-gauge.js';
+import { drawTiltGauge, drawOctaveGauge, drawLock } from '../ui/tilt-gauge.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
 const SIGN_TEXT = ['1 dedo', '2 dedos', '3 dedos', '4 dedos', 'mano abierta', 'índice + meñique', 'índice + meñique + pulgar'];
@@ -34,6 +34,7 @@ export function mount(root) {
   let progWaitChange = null; // al completar la progresión, esperar a que cambie el acorde
   let chordHandInfo = null;
   let exprHandInfo = null;
+  let lockedNow = false;
 
   const tonic = () => 48 + settings.chordKey;
 
@@ -63,7 +64,7 @@ export function mount(root) {
     legend.replaceChildren(
       ...HAND_SHAPES.map((shape, i) => {
         const deg = i + 1;
-        const q = NATURAL_QUALITY[i];
+        const q = restQuality(deg, settings.chordStraight);
         const row = h('div.legend-row', { style: { '--c': noteColor(chordRoot(tonic(), deg)) } },
           h('span.legend-sign', { html: handSvg(shape, { side: settings.chordLefty ? 'derecha' : 'izquierda', size: 38 }) }),
           h('span.legend-text', SIGN_TEXT[i]),
@@ -74,14 +75,17 @@ export function mount(root) {
         return row;
       }),
       h('div.legend-row.muted-row', h('span.legend-sign', { html: handSvg('', { side: settings.chordLefty ? 'derecha' : 'izquierda', size: 38 }) }), h('span.legend-text', 'puño'), h('span.legend-roman', ''), h('span.legend-chord', 'silencio')),
-      h('p.legend-tip', '↔️ Inclínala: ', h('b', 'hacia dentro = mayor'), ', ', h('b', 'hacia fuera = menor'), '. Recta = el acorde natural.'),
+      settings.chordStraight === 'natural'
+        ? h('p.legend-tip', '↔️ Inclínala: ', h('b', 'hacia dentro = mayor'), ', ', h('b', 'hacia fuera = menor'), '. Recta = el acorde natural.')
+        : h('p.legend-tip', '↔️ Recta = ', h('b', 'mayor'), '. Inclínala ', h('b', 'hacia fuera = menor'), '.'),
     );
     const other = settings.chordLefty ? 'izquierda' : 'derecha';
     exprLegend.replaceChildren(
       ...[['i', '1 dedo', 'acorde normal'], ['im', '2 dedos', '1.ª inversión'], ['ima', '3 dedos', 'con séptima'], ['imae', '4 dedos', 'dominante / disminuido'], ['', 'puño', 'silencio']].map(([shape, n, txt]) =>
         h('div.legend-row.expr-row', h('span.legend-sign', { html: handSvg(shape, { side: other, size: 38 }) }), h('span.legend-text', n), h('span.legend-chord', txt)),
       ),
-      h('p.legend-tip', '↕️ Altura: volumen · ↔️ Inclinar: brillo'),
+      h('p.legend-tip', settings.chordOctaveTurn ? '↕️ Altura: volumen · 🔄 Girar: octava' : '↕️ Altura: volumen · ↔️ Inclinar: brillo'),
+      settings.chordThumbLock ? h('p.legend-tip', '👍 Pulgar fuera: 🔒 fija el acorde') : null,
     );
     chordLegendCard.setTitle(settings.chordLefty ? '✋ Mano derecha: el acorde' : '✋ Mano izquierda: el acorde');
     exprLegendCard.setTitle(settings.chordLefty ? '🤚 Mano izquierda: cómo suena' : '🤚 Mano derecha: cómo suena');
@@ -119,6 +123,9 @@ export function mount(root) {
     h('button.btn.primary.tut-btn', { onclick: () => startTutorial() }, '🎓 Tutorial paso a paso'),
     settingSelect('Tonalidad', 'chordKey', SOLFEGE.map((s, i) => [i, `${s} mayor (${LETTERS[i]})`]), onChange),
     settingSelect('Sonido', 'chordInstrument', [...INSTRUMENT_OPTIONS(CHORD_WAVES), ...INSTRUMENT_OPTIONS(INSTRUMENTS)], () => rebuildVoice()),
+    settingSelect('Mano izquierda recta', 'chordStraight', [['mayor', 'Mayor (como Gesture Synth)'], ['natural', 'El acorde natural de la escala (ii, iii y vi menores)']], onChange),
+    settingToggle('Girar la mano derecha cambia de octava', 'chordOctaveTurn', onChange),
+    settingToggle('🧪 Prueba: pulgar derecho fuera = fijar el acorde 🔒', 'chordThumbLock', onChange),
     settingToggle('Callar al quitar la mano derecha', 'chordNeedRight'),
     settingToggle('Arpegiar (tocar las notas una a una)', 'chordArpeggio', (v) => voice?.setArpeggio(v)),
     settingToggle('Soy zurdo/a (la mano derecha forma el acorde)', 'chordLefty'),
@@ -134,7 +141,7 @@ export function mount(root) {
     h('ul',
       h('li', '✋ Con la ', h('b', 'mano izquierda'), ' levanta dedos: 1 dedo = acorde I, 2 = II… (mira las tablas a los lados de la cámara).'),
       h('li', '↔️ Inclínala para cambiar entre mayor y menor.'),
-      h('li', '🤚 Con la otra mano: súbela o bájala para el volumen e inclínala para el brillo.'),
+      h('li', '🤚 Con la otra mano: súbela o bájala para el volumen y gírala para cambiar de octava.'),
       h('li', '✊ Cierra el puño para callar.'),
     ),
     h('button.btn.small', { onclick: () => hint.remove() }, 'Entendido'),
@@ -195,7 +202,7 @@ export function mount(root) {
     const v = ensureVoice();
     if (!v) return;
     if (!state) v.silence();
-    else v.setChord(chordNotes(tonic(), state.degree, state.quality, state.voicing));
+    else v.setChord(chordNotes(tonic(), state.degree, state.quality, state.voicing, state.octave));
     legendRows.forEach((r, i) => r.classList.toggle('active', !!state && state.degree === i + 1));
   }
 
@@ -210,6 +217,7 @@ export function mount(root) {
       exprMuted = r.exprMuted;
       chordHandInfo = r.chordInfo;
       exprHandInfo = r.exprInfo;
+      lockedNow = r.locked;
       applyChord(stable);
       tutorial?.update({
         chordPresent: !!r.chord,
@@ -220,6 +228,8 @@ export function mount(root) {
         exprMuted,
         volume,
         brightness: r.brightness,
+        octave: r.octave,
+        locked: r.locked,
         stable,
       });
       const v = ensureVoice();
@@ -257,7 +267,7 @@ export function mount(root) {
       if (chordHandInfo) {
         const { pos, degree, tilt: tl, onLeft } = chordHandInfo;
         const ok = degree >= 1 && degree <= 7;
-        const label = ok ? romanFor(degree, qualityFor(degree, tl)) : '✊';
+        const label = ok ? romanFor(degree, qualityFor(degree, tl, settings.chordStraight)) : '✊';
         const col = ok ? noteColor(chordRoot(tonic(), degree)) : '#999';
         const x = pos.x + (onLeft ? -10 : 10);
         const y = pos.y + 46;
@@ -275,8 +285,9 @@ export function mount(root) {
         ctx.fillText(label, x, y + 1);
         ctx.restore();
         // Barra de inclinación: dónde está la mano y cuánto falta para mayor / menor
-        if (ok) drawTiltGauge(ctx, x, y + 70, chordHandInfo.roll, onLeft, tl);
-      }
+        if (ok) drawTiltGauge(ctx, x, y + 70, chordHandInfo.roll, onLeft, tl, settings.chordStraight);
+        if (lockedNow) drawLock(ctx, x + 36, y - 30);
+      } else if (lockedNow) drawLock(ctx, 70, 90);
       if (exprHandInfo) {
         const { pos, voicing, muted } = exprHandInfo;
         ctx.save();
@@ -292,6 +303,7 @@ export function mount(root) {
         ctx.textBaseline = 'middle';
         ctx.fillText(text, pos.x, pos.y + 36);
         ctx.restore();
+        if (settings.chordOctaveTurn && !muted) drawOctaveGauge(ctx, pos.x, pos.y + 78, exprHandInfo.roll, exprHandInfo.octave);
       }
     },
   });
@@ -315,13 +327,13 @@ export function mount(root) {
     ctx.shadowBlur = 24;
     ctx.fillStyle = '#fff';
     ctx.font = '900 64px Nunito, system-ui, sans-serif';
-    ctx.fillText(sym, cx, cy - 18);
+    ctx.fillText(sym + (state.octave > 0 ? ' ↑' : state.octave < 0 ? ' ↓' : ''), cx, cy - 18);
     ctx.shadowBlur = 0;
     ctx.font = '800 20px Nunito, system-ui, sans-serif';
     ctx.fillStyle = col;
     ctx.fillText(`${roman} · ${chordLongName(tonic(), state.degree, state.quality, settings.notation)}${state.voicing !== 'triada' ? ' · ' + voicingLabel(state.voicing, state.quality) : ''}`, cx, cy + 26);
     // Notas del acorde como fichas de colores
-    const notes = chordNotes(tonic(), state.degree, state.quality, state.voicing).slice(1);
+    const notes = chordNotes(tonic(), state.degree, state.quality, state.voicing, state.octave).slice(1);
     const chipW = 52;
     let x = cx - (notes.length * (chipW + 8) - 8) / 2;
     for (const m of notes) {

@@ -5,6 +5,7 @@ import { cameraStats } from './stats.js';
 
 export const TIP = { thumb: 4, index: 8, middle: 12, ring: 16, pinky: 20 };
 const PIP = { thumb: 3, index: 6, middle: 10, ring: 14, pinky: 18 };
+const MCP = { thumb: 2, index: 5, middle: 9, ring: 13, pinky: 17 };
 
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -108,6 +109,9 @@ export function analyzeHand(lm, world = null, prevThumb = false) {
     extended[f] = d(P[0], P[TIP[f]]) > d(P[0], P[PIP[f]]) * 1.12;
   }
   extended.thumb = thumbOut(lm, prevThumb);
+  // Mano cerrada de verdad (puño): las puntas vuelven hacia la palma, más cerca de la muñeca
+  // que los nudillos. Una mano de piano, con los dedos curvados, no cuenta como cerrada.
+  const curled = ['index', 'middle', 'ring', 'pinky'].filter((f) => d(P[0], P[TIP[f]]) < d(P[0], P[MCP[f]]) * 0.95).length;
   const pinchDist = dist(lm[TIP.thumb], lm[TIP.index]) / size;
   const nExt = ['index', 'middle', 'ring', 'pinky'].filter((f) => extended[f]).length;
   return {
@@ -116,6 +120,7 @@ export function analyzeHand(lm, world = null, prevThumb = false) {
     pinch: pinchDist < 0.38,
     pinchDist,
     fist: nExt === 0, // puño aunque el pulgar quede por fuera
+    closed: curled >= 3,
     indexUp: extended.index,
     openHand: nExt >= 4,
   };

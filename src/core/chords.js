@@ -28,18 +28,22 @@ export function romanFor(degree, quality) {
   return r.toLowerCase() + (quality === 'dim' ? '°' : '');
 }
 
+/** Distancia de cada grado a la tónica, como en Gesture Synth: el VII queda por debajo. */
+const DEGREE_OFFSET = [0, 2, 4, 5, 7, 9, -1];
+
 /**
- * Notas MIDI de un acorde, en posición abierta y en un registro claro (como en Gesture Synth):
- * la fundamental queda entre Sol3 y Fa#4, y encima van la quinta, la octava y la décima.
+ * Notas MIDI de un acorde, en posición abierta y en el mismo registro que Gesture Synth:
+ * la tónica va de Solb3 a Fa4, cada grado sube desde ella (el VII baja un semitono) y encima
+ * van la quinta, la octava y la décima.
  * @param {number} tonic  nota MIDI de la tónica (solo importa la nota, no la octava)
  * @param {number} degree 1..7
  * @param {'mayor'|'menor'|'dim'} quality
  * @param {keyof VOICINGS} voicing
+ * @param {number} octave  -1, 0 o +1 (girando la mano de expresión)
  */
-export function chordNotes(tonic, degree, quality, voicing = 'triada') {
-  let root = tonic + MAJOR_STEPS[degree - 1];
-  while (root > 66) root -= 12;
-  while (root < 55) root += 12;
+export function chordNotes(tonic, degree, quality, voicing = 'triada', octave = 0) {
+  const home = 54 + ((((tonic % 12) - 6) % 12) + 12) % 12;
+  const root = home + DEGREE_OFFSET[degree - 1] + 12 * octave;
   const third = quality === 'mayor' ? 4 : 3;
   const fifth = quality === 'dim' ? 6 : 7;
   let iv;
@@ -117,11 +121,33 @@ export function tiltSide(roll, onLeft, prev = 'recta', enter = TILT_ENTER, exit 
   return 'recta';
 }
 
-/** Calidad final: recta = la natural de la escala; dentro = mayor; fuera = menor. */
-export function qualityFor(degree, tilt) {
+/**
+ * Calidad final. Hacia fuera = menor; hacia dentro = mayor. Con la mano recta:
+ * 'mayor' → mayor en todos los grados, como en Gesture Synth; 'natural' → la de la escala.
+ */
+export function qualityFor(degree, tilt, straight = 'mayor') {
   if (tilt === 'dentro') return 'mayor';
   if (tilt === 'fuera') return 'menor';
-  return NATURAL_QUALITY[degree - 1];
+  return restQuality(degree, straight);
+}
+
+/** Calidad de cada grado con la mano recta. */
+export const restQuality = (degree, straight = 'mayor') => (straight === 'natural' ? NATURAL_QUALITY[degree - 1] : 'mayor');
+
+/** Grados de giro de la mano de expresión para subir o bajar una octava (y para volver). */
+export const OCTAVE_ENTER = 22;
+export const OCTAVE_EXIT = 11;
+
+/**
+ * Octava según el giro de la mano de expresión, con histéresis: girarla hacia la derecha de la
+ * pantalla (como una rueda de volumen) sube una octava y hacia la izquierda la baja.
+ */
+export function octaveFromRoll(roll, prev = 0) {
+  if (prev === 1 && roll > OCTAVE_EXIT) return 1;
+  if (prev === -1 && roll < -OCTAVE_EXIT) return -1;
+  if (roll > OCTAVE_ENTER) return 1;
+  if (roll < -OCTAVE_ENTER) return -1;
+  return 0;
 }
 
 /** Evita cambios de acorde por gestos a medio hacer: un valor nuevo debe mantenerse un momento. */

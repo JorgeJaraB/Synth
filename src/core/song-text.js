@@ -115,7 +115,7 @@ export function parseSongText({ notesText = '', lyricsText = '', chordsText = ''
 }
 
 /** Genera los bytes de un archivo .kar (MIDI con letra). */
-export function buildKar({ title, bpm = 100, beatsPerBar = 4, notes, syllables = [], chords = [], marks = [] }) {
+export function buildKar({ title, artist = '', bpm = 100, beatsPerBar = 4, notes, syllables = [], chords = [], marks = [], source = null }) {
   const TPB = 480;
   const tick = (beats) => Math.round(beats * TPB);
   const toTrack = (evs) => {
@@ -137,9 +137,15 @@ export function buildKar({ title, bpm = 100, beatsPerBar = 4, notes, syllables =
       { t: tick(n.start + n.beats) - 10, off: true, e: { type: 'noteOff', channel, noteNumber: n.midi, velocity: 0 } },
     ]);
   const melody = notes.filter((n) => !n.rest);
+  // Título y artista como en los .kar ("@T" la primera vez es el título y la segunda, el artista).
+  const info = [{ t: 0, e: { meta: true, type: 'text', text: latin1('@T' + title) } }];
+  if (artist) info.push({ t: 0, e: { meta: true, type: 'text', text: latin1('@T' + artist) } });
   const tracks = [
     toTrack([
       { t: 0, e: { meta: true, type: 'trackName', text: latin1(title) } },
+      // Lo que escribió el maestro en el editor, para poder volver a abrirla y corregirla.
+      ...(source ? [{ t: 0, e: { meta: true, type: 'text', text: '@SYNTH' + encodeURIComponent(JSON.stringify(source)) } }] : []),
+      ...(syllables.length ? [] : info),
       { t: 0, e: { meta: true, type: 'setTempo', microsecondsPerBeat: Math.round(60000000 / bpm) } },
       { t: 0, e: { meta: true, type: 'timeSignature', numerator: beatsPerBar, denominator: 4, metronome: 24, thirtyseconds: 8 } },
       // Marcas con la tonalidad y los acordes exactos ("key:G", "chord:Cm"), si se conocen.
@@ -152,10 +158,7 @@ export function buildKar({ title, bpm = 100, beatsPerBar = 4, notes, syllables =
     tracks.push(toTrack([{ t: 0, e: { meta: true, type: 'trackName', text: 'Acompanamiento' } }, ...noteEvs(cn, 1, 62)]));
   }
   if (syllables.length) {
-    const words = [
-      { t: 0, e: { meta: true, type: 'text', text: '@KMIDI KARAOKE FILE' } },
-      { t: 0, e: { meta: true, type: 'text', text: latin1('@T' + title) } },
-    ];
+    const words = [{ t: 0, e: { meta: true, type: 'text', text: '@KMIDI KARAOKE FILE' } }, ...info];
     melody.forEach((n, i) => {
       if (syllables[i]) words.push({ t: tick(n.start), e: { meta: true, type: 'text', text: latin1(syllables[i]) } });
     });
