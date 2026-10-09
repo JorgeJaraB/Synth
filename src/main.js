@@ -5,6 +5,7 @@ import { settings } from './core/settings.js';
 import { registerView, setRoot, navigate, onNavigate } from './router.js';
 import { h, toast } from './ui/dom.js';
 import { installErrorCapture } from './core/diagnostics.js';
+import { setWindowHidden, setRecording } from './core/perf.js';
 
 installErrorCapture();
 
@@ -80,6 +81,7 @@ function watchRecorder() {
   import('./core/recorder.js').then(({ recorder }) => {
     recorder.on(({ state }) => {
       const rec = state === 'recording';
+      setRecording(state !== 'idle');
       document.body.classList.toggle('recording', rec);
       recButton.classList.toggle('on', rec);
       clearInterval(recTimer);
@@ -216,4 +218,10 @@ buildShell();
 setupGlobalDrop();
 watchRecorder();
 watchUpdates();
+
+// Ventana minimizada u oculta: se pausa la detección de manos (salvo si se está grabando).
+// En la app de escritorio la página siempre cuenta como visible (no se frena en segundo
+// plano), así que el aviso de minimizar llega desde Electron.
+document.addEventListener('visibilitychange', () => setWindowHidden(document.visibilityState === 'hidden'));
+window.synthAPI?.onWindowVisible?.((visible) => setWindowHidden(!visible));
 navigate('home');

@@ -21,6 +21,7 @@ export const DEFAULTS = {
   mirror: true,
   showSkeleton: true,
   cameraId: '',
+  lightMode: 'auto', // modo ligero para equipos lentos: 'auto' | 'on' | 'off'
   recordMic: false, // grabar también el micrófono (para el karaoke)
   // Acordes con gestos
   chordKey: 0, // tonalidad: 0 = Do, 2 = Re, 7 = Sol...
