@@ -1,5 +1,6 @@
 // Pequeñas utilidades para construir la interfaz sin frameworks.
 import { settings } from '../core/settings.js';
+import { perf } from '../core/perf.js';
 
 /** Crea un elemento: h('div.clase#id', {atributos}, hijos...) */
 export function h(tag, attrs = {}, ...children) {
@@ -84,7 +85,8 @@ export function toast(msg, ms = 2600) {
 
 /** Ajusta un canvas al tamaño de su contenedor con la densidad de píxeles correcta. */
 export function fitCanvas(canvas) {
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  // En modo ligero, sin alta densidad: hasta 4 veces menos píxeles que pintar.
+  const dpr = Math.min(perf.light ? 1 : 2, window.devicePixelRatio || 1);
   const r = canvas.getBoundingClientRect();
   const w = Math.max(1, Math.round(r.width * dpr));
   const hh = Math.max(1, Math.round(r.height * dpr));

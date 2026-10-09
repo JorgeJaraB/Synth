@@ -396,6 +396,13 @@ function createWindow() {
     win.show();
   });
   win.loadURL('app://synth/index.html');
+  // Minimizada: la interfaz pausa la detección de manos (la página no se entera sola porque
+  // backgroundThrottling está desactivado).
+  const sendVisible = (v) => win && !win.isDestroyed() && win.webContents.send('win:visible', v);
+  win.on('minimize', () => sendVisible(false));
+  win.on('hide', () => sendVisible(false));
+  win.on('restore', () => sendVisible(true));
+  win.on('show', () => sendVisible(true));
 
   // Los enlaces externos se abren en el navegador, nunca dentro de la app.
   win.webContents.setWindowOpenHandler(({ url }) => {

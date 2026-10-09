@@ -1,6 +1,7 @@
 // Ajustes generales: cámara, notas, sonido, apariencia.
 import { cameraStatsText } from '../core/stats.js';
 import { settings, resetSettings } from '../core/settings.js';
+import { perf, onPerfChange } from '../core/perf.js';
 import { listCameras, tracker } from '../core/hands.js';
 import { isDesktop, songsFolderPath, openSongsFolder } from '../core/library.js';
 import { navigate } from '../router.js';
@@ -15,8 +16,15 @@ export function mount(root) {
   const previewHost = h('div.camera-preview');
   const camStats = h('p.muted.cam-stats');
   const statsTimer = setInterval(() => {
-    camStats.textContent = stage ? '📊 ' + cameraStatsText() : '';
+    camStats.textContent = stage ? '📊 ' + cameraStatsText() + (perf.light ? ' · modo ligero' : '') : '';
   }, 1000);
+  const lightNote = h('p.muted');
+  const showLightNote = () => {
+    lightNote.textContent = settings.lightMode === 'auto' && perf.autoOn ? 'Este equipo va justo: se ha activado el modo ligero.' : '';
+    lightNote.hidden = !lightNote.textContent;
+  };
+  showLightNote();
+  const offPerf = onPerfChange(showLightNote);
   const previewBtn = h('button.btn', { onclick: () => (stage ? stopPreview() : startPreview()) }, '📷 Probar cámara');
 
   function startPreview() {
@@ -74,6 +82,8 @@ export function mount(root) {
         h('label.field', h('span.field-label', 'Cámara'), camSel),
         settingToggle('Imagen en espejo (recomendado)', 'mirror'),
         settingToggle('Dibujar las líneas de la mano', 'showSkeleton'),
+        settingSelect('Modo ligero (para equipos lentos)', 'lightMode', [['auto', 'Automático'], ['on', 'Siempre'], ['off', 'Nunca']], showLightNote),
+        lightNote,
         h('div.row', previewBtn),
         previewHost,
         camStats,
@@ -133,6 +143,7 @@ export function mount(root) {
   root.append(view);
   return () => {
     clearInterval(statsTimer);
+    offPerf();
     document.removeEventListener('synth-update', onUpd);
     stopPreview();
     tracker.stop();
