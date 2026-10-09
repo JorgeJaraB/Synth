@@ -90,6 +90,7 @@ export function mount(root, params = {}) {
         search,
         h('div.spacer'),
         h('button.btn', { onclick: () => navigate('song-editor') }, '✏️ Crear canción'),
+        h('button.btn', { title: 'Tocar los acordes con una canción de YouTube (prueba, necesita internet)', onclick: () => navigate('youtube') }, '▶ YouTube'),
         h('button.btn.primary', { onclick: () => fileInput.click() }, '➕ Añadir canciones'),
         isDesktop ? h('button.btn', { onclick: () => openSongsFolder() }, '📂 Abrir carpeta') : null,
         h('button.btn.icon', { title: 'Cómo añadir canciones', onclick: () => { showHelp = !showHelp; renderHelp(); } }, '❓'),

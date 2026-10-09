@@ -191,6 +191,26 @@ function watchSongs() {
 
 function registerIpc() {
   ipcMain.handle('songs:list', () => listSongs());
+  // Tocar con YouTube (prueba): buscador. Solo sale el texto buscado (y la clave del maestro) hacia
+  // la API de YouTube, y solo vuelven títulos e identificadores de vídeo.
+  ipcMain.handle('yt:search', async (_e, query, key) => {
+    if (typeof query !== 'string' || typeof key !== 'string' || !query.trim() || !key.trim()) return { error: 'sin-clave' };
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    const params = { part: 'snippet', type: 'video', videoEmbeddable: 'true', safeSearch: 'strict', maxResults: '8', q: query.slice(0, 120), key: key.trim() };
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+    try {
+      const res = await net.fetch(url.toString());
+      if (!res.ok) return { error: 'busqueda-' + res.status };
+      const data = await res.json();
+      const clean = (t) => String(t || '').replace(/&(amp|quot|#39|lt|gt);/g, (_m, c) => ({ amp: '&', quot: '"', '#39': "'", lt: '<', gt: '>' })[c]).slice(0, 200);
+      const items = (data.items || [])
+        .filter((it) => /^[\w-]{11}$/.test(it.id?.videoId || ''))
+        .map((it) => ({ videoId: it.id.videoId, title: clean(it.snippet?.title), channel: clean(it.snippet?.channelTitle) }));
+      return { items };
+    } catch {
+      return { error: 'sin-conexion' };
+    }
+  });
   ipcMain.handle('songs:read', async (_e, name) => {
     const buf = await fs.promises.readFile(safeSongPath(name));
     return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
@@ -443,6 +463,15 @@ app.whenReady().then(() => {
     }
   });
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+  // Tocar con YouTube (prueba): el reproductor de YouTube pide saber desde dónde se inserta y la
+  // app no es una web (app://), así que se le indica la página del proyecto.
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['https://www.youtube-nocookie.com/*'] },
+    (details, cb) => {
+      if (!details.requestHeaders.Referer) details.requestHeaders.Referer = 'https://github.com/JorgeJaraB/Synth';
+      cb({ requestHeaders: details.requestHeaders });
+    },
+  );
   registerProtocol();
   registerIpc();
   createWindow();

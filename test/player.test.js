@@ -52,3 +52,23 @@ test('Practicar: adelantarse sigue la canción pero sin puntos ni racha', () => 
   assert.equal(p.score.points, pts);
   assert.equal(p.score.streak, 0);
 });
+
+test('con un reloj externo (YouTube) la canción va donde diga ese reloj', async () => {
+  const { SongPlayer } = await import('../src/core/player.js');
+  let t = 0;
+  let playing = false;
+  const clock = { time: () => t, play: () => (playing = true), pause: () => (playing = false), seek: (x) => (t = x), get playing() { return playing; } };
+  const song = { duration: 10, tracks: [], beats: [], melodyTrack: 0, lines: [] };
+  const p = new SongPlayer(song, { practice: [{ midi: 10, time: 2, duration: 1 }], practiceTrack: -1, mode: 'tiempo', clock });
+  p.play();
+  assert.equal(playing, true);
+  t = 2.05;
+  p.update();
+  assert.equal(p.time, 2.05);
+  p.input(10, { penalize: false });
+  assert.equal(p.score.hits, 1);
+  p.seek(5);
+  assert.equal(t, 5);
+  p.pause();
+  assert.equal(playing, false);
+});

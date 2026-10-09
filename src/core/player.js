@@ -14,6 +14,8 @@ export class SongPlayer {
    *  - practiceTrack: índice de la pista que toca el alumno (no se incluye en el acompañamiento)
    *  - mode: 'escuchar' | 'esperar' | 'tiempo'
    *  - instrument: instrumento para la melodía cuando suena sola
+   *  - clock: reloj externo { time(), play(), pause(), seek(t), playing } (p. ej. un vídeo de
+   *    YouTube): la canción va al ritmo de ese reloj en vez del suyo propio
    */
   constructor(song, opts = {}) {
     this.song = song;
@@ -25,7 +27,8 @@ export class SongPlayer {
     this.allTracks = !!opts.allTracks; // que suene todo (escucha previa), aunque el acompañamiento esté apagado
     this.accGain = opts.accGain ?? 1; // escala el volumen del acompañamiento (p. ej. con muchas pistas)
     this.speed = settings.tutorialSpeed;
-    this.time = opts.startAt ?? -1.5; // pequeña cuenta atrás antes de empezar
+    this.clock = opts.clock || null;
+    this.time = opts.startAt ?? (this.clock ? 0 : -1.5); // pequeña cuenta atrás antes de empezar
     this.playing = false;
     this.waiting = null;
     this.listeners = { end: new Set(), hit: new Set(), miss: new Set(), early: new Set() };
@@ -61,10 +64,12 @@ export class SongPlayer {
     if (this.playing) return;
     this.playing = true;
     this._last = audio.now();
+    this.clock?.play();
   }
 
   pause() {
     this.playing = false;
+    this.clock?.pause();
     audio.releaseAll();
   }
 
@@ -73,7 +78,8 @@ export class SongPlayer {
   }
 
   seek(t) {
-    this.time = Math.max(-1.5, Math.min(t, this.duration));
+    this.time = Math.max(this.clock ? 0 : -1.5, Math.min(t, this.duration));
+    this.clock?.seek(this.time);
     this.waiting = null;
     for (const n of this.practice) if (n.time >= this.time) n.state = null;
     audio.releaseAll();
@@ -179,7 +185,10 @@ export class SongPlayer {
     const dt = Math.min(0.25, now - this._last) * this.speed;
     this._last = now;
 
-    if (this.mode === 'esperar' && !this.waiting) {
+    if (this.clock) {
+      // Reloj externo: la canción va donde diga (el alumno sigue al vídeo, no al revés).
+      this.time = this.clock.time();
+    } else if (this.mode === 'esperar' && !this.waiting) {
       // ¿Llegamos a la siguiente nota pendiente? Entonces paramos y esperamos.
       const next = this.practice.find((n, i) => i >= this.practicePtr - 4 && !n.state && n.time >= this.time - 0.001);
       if (next && this.time + dt >= next.time) {

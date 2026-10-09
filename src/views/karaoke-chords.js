@@ -3,6 +3,9 @@
 import { audio } from '../core/audio.js';
 import { settings } from '../core/settings.js';
 import { loadSong } from '../core/library.js';
+import { parseSong } from '../core/midi-parse.js';
+import { parseChordSheet, chordSheetToKar } from '../core/chord-sheet.js';
+import { listYtSongs, saveYtSong, createYtClock, nudgeToNearest, ytErrorText } from '../core/youtube.js';
 import { SongPlayer } from '../core/player.js';
 import { chordTimeline } from '../core/harmony.js';
 import { chordNotes, chordSymbol, chordRoot, romanFor, qualityFor } from '../core/chords.js';
@@ -13,7 +16,7 @@ import { CameraStage } from '../ui/camera-stage.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { handSvg } from '../ui/hand-svg.js';
 import { drawTiltGauge, drawOctaveGauge, drawLock } from '../ui/tilt-gauge.js';
-import { h } from '../ui/dom.js';
+import { h, toast } from '../ui/dom.js';
 import { Transport, speedSelect, toggleButton, accompanimentControl, lyricsToggle, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
@@ -56,7 +59,11 @@ export function mount(root, params) {
   let song = null;
   let chords = [];
   let tonic = 48;
-  let mode = params.mode || 'esperar';
+  // Canción de YouTube (prueba): suena el vídeo y la canción sigue su reloj.
+  const yt = params.yt ? listYtSongs().find((x) => x.id === params.yt) : null;
+  let clock = null;
+  let mode = yt ? 'tiempo' : params.mode || 'esperar';
+  const back = () => navigate(yt ? 'youtube' : 'library');
   let alive = true;
   let voice = null;
   let lyrics = null;
@@ -86,8 +93,40 @@ export function mount(root, params) {
   let harmonyTracks = []; // pistas que se callan para que los acordes los ponga el alumno
 
   const score = scoreBox();
+  // Con YouTube: reajustar la sincronización y el volumen del vídeo, en vez de velocidad y piano.
+  const saveSync = () => yt && clock && saveYtSong({ ...yt, offset: clock.sync.offset });
+  const shift = (d) => {
+    if (!clock) return;
+    clock.sync.offset += d;
+    saveSync();
+    say(d > 0 ? '⏩ Acordes un poco antes' : '⏪ Acordes un poco después', 900);
+  };
+  const ytVol = h('input.vol-range', {
+    type: 'range', min: 0, max: 1, step: 0.05, value: settings.ytVolume, title: 'Volumen de la canción de YouTube',
+    oninput: () => {
+      settings.ytVolume = Number(ytVol.value);
+      clock?.setVolume(settings.ytVolume);
+    },
+  });
+  const ytExtras = [
+    h('button.btn.small', {
+      title: 'Pulsa justo cuando cambie el acorde en la canción y se recolocan los acordes',
+      onclick: () => {
+        if (!clock || !player) return;
+        const d = nudgeToNearest(player.time, chords.map((c) => c.time));
+        if (!d) return say('🎯 Pulsa justo cuando cambie el acorde', 1400);
+        clock.sync.offset += d;
+        saveSync();
+        say('🎯 Sincronizado', 900);
+      },
+    }, '🎯 Sincronizar'),
+    h('button.btn.small', { title: 'Los acordes van por delante: retrasarlos', onclick: () => shift(0.2) }, '⏪ −0,2 s'),
+    h('button.btn.small', { title: 'Los acordes van por detrás: adelantarlos', onclick: () => shift(-0.2) }, '+0,2 s ⏩'),
+    h('label.vol-label', '🎬 Canción', ytVol),
+    lyricsToggle(() => lyricsHost),
+  ];
   const transport = new Transport(() => player, {
-    extras: [
+    extras: yt ? ytExtras : [
       speedSelect(() => player),
       accompanimentControl(),
       lyricsToggle(() => lyricsHost),
@@ -102,21 +141,25 @@ export function mount(root, params) {
   const keyEl = h('span.key-badge');
   const toolbar = h(
     'div.view-toolbar.wrap',
-    h('button.btn.icon', { title: 'Volver a canciones', onclick: () => navigate('library') }, '←'),
+    h('button.btn.icon', { title: 'Volver a canciones', onclick: back }, '←'),
     titleEl,
     keyEl,
+    yt ? h('span.yt-badge', '▶ YouTube') : null,
     h('div.spacer'),
-    modeSelector(mode, (m) => {
-      mode = m;
-      player.mode = m;
-      player.restart();
-    }),
+    yt
+      ? null
+      : modeSelector(mode, (m) => {
+          mode = m;
+          player.mode = m;
+          player.restart();
+        }),
     score.el,
   );
   const nowCard = h('div.kc-now');
   const lyricsHost = h('div.kc-lyrics');
   lyricsHost.hidden = !settings.showLyrics;
-  const stageWrap = h('div.stage-wrap', nowCard, lyricsHost);
+  const ytHost = h('div.yt-player');
+  const stageWrap = h('div.stage-wrap', nowCard, lyricsHost, yt ? ytHost : null);
   const view = h('div.view.tutorial', toolbar, h('div.tutorial-body', stageWrap), transport.el);
   root.append(view);
 
@@ -260,13 +303,30 @@ export function mount(root, params) {
 
   (async () => {
     try {
-      song = await loadSong(params.songName);
+      if (yt) {
+        // La hoja de acordes se convierte en canción con la velocidad medida al sincronizar.
+        const sheet = parseChordSheet(yt.text);
+        if (yt.key !== 'auto' && yt.key != null) sheet.key = Number(yt.key);
+        song = parseSong(chordSheetToKar(sheet, { title: yt.title, artist: yt.artist, bpm: yt.bpm, beatsPerChord: Number(yt.per) || 4 }), yt.title + '.kar');
+      } else song = await loadSong(params.songName);
     } catch {
       titleEl.textContent = 'No se pudo cargar la canción';
       return;
     }
+    if (yt) {
+      clock = createYtClock(ytHost, yt.videoId, { offset: yt.offset || 0 });
+      try {
+        await clock.ready;
+      } catch (e) {
+        if (!alive) return;
+        nowCard.replaceChildren(h('p', '⚠️ ' + ytErrorText(e)));
+        toast('⚠️ ' + ytErrorText(e), 5000);
+      }
+      if (!alive) return clock.destroy();
+      clock.setVolume(settings.ytVolume);
+    }
     if (!alive) return;
-    titleEl.textContent = song.title;
+    titleEl.textContent = yt ? yt.title : song.title;
     const melodyTrack = params.practiceTrack ?? song.melodyTrack;
     const res = chordTimeline(song, { melodyTrack });
     tonic = 48 + res.tonic;
@@ -277,13 +337,16 @@ export function mount(root, params) {
     // Por defecto se callan las pistas de acompañamiento (los acordes los pone el alumno);
     // con "Piano de la canción" suenan también, para canciones donde importa más la melodía.
     harmonyTracks = song.tracks.filter((t) => !t.isDrum && t.index !== melodyTrack).map((t) => t.index);
-    player = new SongPlayer(song, { practiceTrack: -1, practice, mode, muted: settings.kcOriginalBacking ? [] : harmonyTracks, accGain: settings.kcOriginalBacking ? BACKING_GAIN : 1 });
+    player = yt
+      ? // Con YouTube no suena nada de la app salvo los acordes del alumno: la música es el vídeo.
+        new SongPlayer(song, { practiceTrack: -1, practice, mode, muted: song.tracks.map((t) => t.index), clock })
+      : new SongPlayer(song, { practiceTrack: -1, practice, mode, muted: settings.kcOriginalBacking ? [] : harmonyTracks, accGain: settings.kcOriginalBacking ? BACKING_GAIN : 1 });
     if (import.meta.env.DEV) window.__kc = { player, chords, get reader() { return reader; }, get voice() { return voice; } };
     player.on('early', () => say(player.mode === 'tiempo' ? '⏩ ¡Muy pronto! Cambia de acorde cuando llegue a la línea' : '⏩ Te has adelantado: espera a que llegue a la línea'));
     player.on('end', () => {
       voice?.silence();
       audio.releaseAll();
-      resultOverlay(view, player, { onReplay: () => { player.restart(); player.play(); }, onBack: () => navigate('library') });
+      resultOverlay(view, player, { onReplay: () => { player.restart(); player.play(); }, onBack: back });
     });
     if (song.hasLyrics) {
       lyrics = new LyricsView(lyricsHost, { size: 'normal' });
@@ -297,6 +360,7 @@ export function mount(root, params) {
   return () => {
     alive = false;
     player?.pause();
+    clock?.destroy();
     voice?.dispose();
     stage.destroy();
     transport.destroy();

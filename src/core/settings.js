@@ -54,6 +54,9 @@ export const DEFAULTS = {
   showLyrics: true, // letra visible en tutoriales y karaoke de acordes
   accompanimentVolume: 0.6,
   kcOriginalBacking: false, // karaoke de acordes: que suene también el piano original de la canción
+  // Tocar con YouTube (prueba)
+  youtubeApiKey: '', // clave de la API de datos de YouTube, solo para el buscador
+  ytVolume: 0.6, // volumen del vídeo (para que se oigan los acordes del alumno)
   metronome: false,
   lookahead: 3, // segundos de notas visibles cayendo
 };

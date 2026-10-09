@@ -20,6 +20,7 @@ registerView('karaoke', () => import('./views/karaoke.js'));
 registerView('karaoke-chords', () => import('./views/karaoke-chords.js'));
 registerView('song-editor', () => import('./views/song-editor.js'));
 registerView('settings', () => import('./views/settings.js'));
+registerView('youtube', () => import('./views/youtube.js'));
 
 const NAV = [
   ['home', '🏠', 'Inicio'],

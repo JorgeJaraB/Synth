@@ -35,3 +35,13 @@ test('el envío de reportes solo acepta texto y lo limpia', () => {
   const rec = main.slice(main.indexOf("ipcMain.handle('rec:start'"), main.indexOf("ipcMain.handle('rec:folder'"));
   assert.ok(!/net\.fetch|https?:/.test(rec), 'el código de grabación usa la red');
 });
+
+test('YouTube (prueba): ningún código de fuera se carga en la app y el vídeo va aislado', () => {
+  const csp = read('index.html').match(/Content-Security-Policy" content="([^"]+)"/)[1];
+  const dir = (name) => csp.split(';').map((s) => s.trim()).find((s) => s.startsWith(name + ' ')) || '';
+  assert.ok(!/https?:|\*/.test(dir('script-src')), 'script-src permite código de internet: ' + dir('script-src'));
+  assert.equal(dir('frame-src'), 'frame-src https://www.youtube-nocookie.com');
+  const yt = read('src/core/youtube.js');
+  assert.match(yt, /setAttribute\('sandbox', 'allow-scripts allow-same-origin allow-presentation'\)/);
+  for (const bad of ['fetch(', 'XMLHttpRequest', 'iframe_api', 'createElement(\'script\')']) assert.ok(!yt.includes(bad), 'youtube.js contiene ' + bad);
+});
