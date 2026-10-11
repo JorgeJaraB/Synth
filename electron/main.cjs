@@ -30,6 +30,9 @@ const SONG_RE = /\.(mid|midi|kar|musicxml|mxl|xml)$/i;
 // negra de Chromium o no hay aceleración, se usa el renderizado por software.
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
 app.commandLine.appendSwitch('enable-unsafe-swiftshader');
+// En Windows, Chromium deja de pintar la ventana cuando otra (p. ej. Edge) la tapa y a veces no
+// vuelve a pintarla al traerla al frente: se veía la ventana de detrás hasta minimizar todo.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } },
@@ -372,6 +375,21 @@ function registerProtocol() {
 
 let win = null;
 
+/**
+ * Traer la ventana al frente. Windows no deja que una app que está detrás se ponga delante
+ * sola (solo parpadea en la barra de tareas): se pone un instante "siempre encima" y se quita.
+ */
+function bringToFront() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  if (!win.isVisible()) win.show();
+  win.setAlwaysOnTop(true);
+  win.focus();
+  win.moveTop();
+  win.setAlwaysOnTop(false);
+  win.webContents.focus();
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1280,
@@ -394,6 +412,7 @@ function createWindow() {
   win.once('ready-to-show', () => {
     win.maximize();
     win.show();
+    bringToFront();
   });
   win.loadURL('app://synth/index.html');
   // Minimizada: la interfaz pausa la detección de manos (la página no se entera sola porque
@@ -420,12 +439,8 @@ function createWindow() {
   });
 }
 
-app.on('second-instance', () => {
-  if (win) {
-    if (win.isMinimized()) win.restore();
-    win.focus();
-  }
-});
+// Al abrir la app otra vez (acceso directo, menú Inicio) estando ya abierta: se trae al frente.
+app.on('second-instance', () => bringToFront());
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
