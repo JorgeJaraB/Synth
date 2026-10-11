@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { autoLightStep, frameGate, AUTO_LIGHT } from '../src/core/perf.js';
 
-const OFF = { on: false, slowSince: null };
+const OFF = { on: false, slowSince: null, okSince: null };
 const run = (samples, { since = 1, start = 5000, step = 1000 } = {}) => {
   let st = OFF;
   samples.forEach((s, i) => (st = autoLightStep(st, { running: true, since, ...s }, start + i * step)));
@@ -13,17 +13,22 @@ const run = (samples, { since = 1, start = 5000, step = 1000 } = {}) => {
 test('modo ligero: se activa tras unos segundos seguidos yendo lento', () => {
   const slow = { detectMs: 60, detectFps: 14 };
   assert.equal(run([slow, slow, slow]).on, false);
-  assert.equal(run([slow, slow, slow, slow, slow]).on, true);
+  assert.equal(run(Array(7).fill(slow)).on, true);
 });
 
 test('modo ligero: pocas imágenes por segundo también cuentan si el detector va justo', () => {
-  const s = { detectMs: 28, detectFps: 15 };
-  assert.equal(run(Array(6).fill(s)).on, true);
+  const s = { detectMs: 35, detectFps: 12 };
+  assert.equal(run(Array(7).fill(s)).on, true);
 });
 
 test('modo ligero: cámara lenta (poca luz) con un detector rápido no lo activa', () => {
-  const s = { detectMs: 8, detectFps: 15 };
+  const s = { detectMs: 14, detectFps: 12 };
   assert.equal(run(Array(10).fill(s)).on, false);
+});
+
+test('modo ligero: con la ventana tapada o detrás no cuenta (parecía lenta sin serlo)', () => {
+  const slowHidden = { detectMs: 90, detectFps: 5, active: false };
+  assert.equal(run(Array(20).fill(slowHidden)).on, false);
 });
 
 test('modo ligero: un pico suelto no lo activa y la zona intermedia no reinicia la cuenta', () => {
@@ -31,19 +36,18 @@ test('modo ligero: un pico suelto no lo activa y la zona intermedia no reinicia 
   const good = { detectMs: 10, detectFps: 30 };
   const mid = { detectMs: 35, detectFps: 25 };
   assert.equal(run([slow, slow, good, slow, slow, good, slow, slow]).on, false);
-  assert.equal(run([slow, slow, mid, slow, slow]).on, true);
+  assert.equal(run([slow, slow, mid, slow, slow, slow, slow]).on, true);
 });
 
-test('modo ligero: se ignoran los primeros segundos y una vez activado se queda', () => {
+test('modo ligero: se ignoran los primeros segundos y se quita si luego va bien un buen rato', () => {
   const slow = { detectMs: 90, detectFps: 10 };
+  const good = { detectMs: 14, detectFps: 30 };
   // Aún calentando (since muy reciente): no cuenta.
   let st = OFF;
   for (let t = 0; t < AUTO_LIGHT.warmupMs; t += 500) st = autoLightStep(st, { running: true, since: 1, ...slow }, t + 1);
   assert.equal(st.on, false);
-  st = run(Array(6).fill(slow));
-  assert.equal(st.on, true);
-  st = autoLightStep(st, { running: true, since: 1, detectMs: 5, detectFps: 30 }, 99999);
-  assert.equal(st.on, true);
+  assert.equal(run([...Array(7).fill(slow), ...Array(10).fill(good)]).on, true); // 10 s bien: sigue
+  assert.equal(run([...Array(7).fill(slow), ...Array(25).fill(good)]).on, false); // 25 s bien: se quita
   // Con la cámara apagada no se decide nada.
   assert.equal(autoLightStep(OFF, { running: false, since: 0, ...slow }, 99999).on, false);
 });

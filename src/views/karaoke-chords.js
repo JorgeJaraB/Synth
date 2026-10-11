@@ -18,11 +18,15 @@ import { Transport, speedSelect, toggleButton, accompanimentControl, lyricsToggl
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
 const QUALITY_CODE = { mayor: 0, menor: 1, dim: 2 };
+const VOICING_CODE = { triada: 0, inversion: 1, septima: 2, dominante: 3 };
 /**
- * El reproductor compara "notas": el código junta el grado y si es mayor o menor. Con la mano
- * recta en mayor (como Gesture Synth) no hay gesto de disminuido: vale con hacerlo menor.
+ * El reproductor compara "notas": el código junta el grado, si es mayor o menor y la variante
+ * (los dedos de la mano derecha): para acertar tienen que estar bien las dos manos. Con la mano
+ * recta en mayor no hay gesto de disminuido: vale con hacerlo menor.
  */
-const chordCode = (degree, quality) => degree * 10 + QUALITY_CODE[quality === 'dim' && settings.chordStraight !== 'natural' ? 'menor' : quality];
+const chordCode = (degree, quality, voicing = 'triada') =>
+  degree * 10 + QUALITY_CODE[quality === 'dim' && settings.chordStraight !== 'natural' ? 'menor' : quality] + 100 * (VOICING_CODE[voicing] || 0);
+const VOICING_FINGERS = { triada: '1 dedo', inversion: '2 dedos', septima: '3 dedos', dominante: '4 dedos' };
 const QUALITY_WORD = { mayor: 'mayor', menor: 'menor', dim: 'disminuido' };
 /** Acordes con séptima (de las canciones de acordes): con cuántos dedos de la otra mano suenan igual. */
 const VOICING_HINT = { septima: '🤚 + 3 dedos', dominante: '🤚 + 4 dedos' };
@@ -227,12 +231,12 @@ export function mount(root, params) {
   }
   /** ¿Es el acorde que toca ahora? (o el siguiente, si está a punto de llegar) */
   function rightChord(st) {
-    const code = chordCode(st.degree, st.quality);
+    const code = chordCode(st.degree, st.quality, st.voicing);
     const t = player?.time ?? 0;
     const cur = player ? currentChord() : null;
-    if (cur && chordCode(cur.degree, cur.quality) === code) return true;
+    if (cur && cur.midi === code) return true;
     const next = player?.practice.find((c) => c.time > t);
-    return !!next && next.time - t < 0.35 && chordCode(next.degree, next.quality) === code;
+    return !!next && next.time - t < 0.35 && next.midi === code;
   }
 
   // ---------- Manos guía ("hologramas") en grande sobre la cámara ----------
@@ -358,20 +362,24 @@ export function mount(root, params) {
         voice.setBrightness(r.brightness);
       }
       // Se recuerda cuándo empezó el alumno a hacer el acorde actual (para no premiar adelantarse).
-      const code = stable ? chordCode(stable.degree, stable.quality) : null;
+      // Para acertar hacen falta las dos manos: sin la derecha (o con el puño) no cuenta.
+      const bothHands = !!(r.expr && r.exprReady && !r.exprMuted) || r.locked;
+      // (la variante se lee de la mano ahora mismo: el acorde estable va un instante por detrás)
+      const code = stable && bothHands ? chordCode(stable.degree, stable.quality, r.locked ? stable.voicing : r.voicing) : null;
       if (code !== heldCode) {
         heldCode = code;
         heldSince = player ? player.time : 0;
       }
-      // Cuenta aunque no esté la mano derecha (la canción sigue); el puño de esa mano sí calla.
-      const fistMuted = r.expr && r.exprMuted;
-      if (player && stable && !fistMuted && !listening) player.input(code, { penalize: false, since: heldSince });
+      if (player && code != null && !listening) player.input(code, { penalize: false, since: heldSince });
       drawLane(ctx, w);
       if (settings.kcHolograms && player && !listening) drawGuide(ctx, w, hh);
       // Casi: el grado está bien pero falta cambiar entre mayor y menor
       const want = player?.expectedNow?.()[0] || player?.practice.find((c) => !c.state && c.time <= player.time + 0.05 && c.time + c.duration > player.time);
-      const nearMiss = !listening && stable && want && want.degree === stable.degree && chordCode(want.degree, want.quality) !== code;
-      if (nearMiss) say(`↔️ ¡Casi! Este acorde es ${QUALITY_WORD[want.quality]}: ${qualityHint(want.quality)}`, 300);
+      const sameShape = !listening && stable && want && want.degree === stable.degree;
+      const qualityOk = sameShape && chordCode(want.degree, want.quality) === chordCode(stable.degree, stable.quality);
+      if (sameShape && !qualityOk) say(`↔️ ¡Casi! Este acorde es ${QUALITY_WORD[want.quality]}: ${qualityHint(want.quality)}`, 300);
+      else if (qualityOk && !bothHands) say(`🤚 ¡Casi! Enseña también la otra mano con ${VOICING_FINGERS[want.voicing || 'triada']}`, 300);
+      else if (qualityOk && code !== want.midi) say(`🤚 ¡Casi! Con la otra mano: ${VOICING_FINGERS[want.voicing || 'triada']}`, 300);
       drawMessage(ctx, w, hh);
       if (r.chordInfo && r.chordInfo.degree >= 1) {
         const { pos, degree, tilt } = r.chordInfo;
@@ -415,7 +423,7 @@ export function mount(root, params) {
     keyEl.textContent = `🎼 ${SOLFEGE[res.tonic]} mayor (${LETTERS[res.tonic]})`;
     chords = res.chords;
     // Los acordes se guardan como "notas" (grado + calidad) para reutilizar el reproductor.
-    const practice = chords.map((c) => ({ midi: chordCode(c.degree, c.quality), degree: c.degree, quality: c.quality, voicing: c.voicing || 'triada', time: c.time, duration: c.duration, velocity: 0.8 }));
+    const practice = chords.map((c) => ({ midi: chordCode(c.degree, c.quality, c.voicing || 'triada'), degree: c.degree, quality: c.quality, voicing: c.voicing || 'triada', time: c.time, duration: c.duration, velocity: 0.8 }));
     // Por defecto se callan las pistas de acompañamiento (los acordes los pone el alumno);
     // con "Piano de la canción" suenan también, para canciones donde importa más la melodía.
     harmonyTracks = song.tracks.filter((t) => !t.isDrum && t.index !== melodyTrack).map((t) => t.index);
