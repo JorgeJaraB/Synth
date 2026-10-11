@@ -1,6 +1,7 @@
 // Motor de audio: instrumentos, efectos y voces continuas para el modo cámara.
 import * as Tone from 'tone';
 import { settings, onSettingsChange } from './settings.js';
+import { perf, onPerfChange } from './perf.js';
 import { toneName, midiToFreq } from './notes.js';
 
 /** Ganancia extra tras el compresor (dB). Ajustada midiendo: acorde ≈ -14 dB RMS. */
@@ -136,13 +137,39 @@ class AudioEngine {
 
     onSettingsChange((k, v) => {
       if (k === 'masterVolume') this.master.volume.rampTo(Tone.gainToDb(Math.max(0.0001, v)), 0.05);
-      if (k === 'reverb') this.reverb.wet.rampTo(v, 0.1);
+      if (k === 'reverb' && !this._reverbOff) this.reverb.wet.rampTo(v, 0.1);
       if (k === 'delay') this.delay.wet.rampTo(v, 0.1);
       if (k === 'accompanimentVolume') this.accBus.gain.rampTo(v, 0.1);
     });
 
+    // Modo ligero: la reverb (lo que más cálculo de sonido gasta) se salta del todo.
+    // No se toca settings.reverb: al quitar el modo ligero vuelve el valor del usuario.
+    this._reverbOff = false;
+    onPerfChange(() => this._applyLight());
+    this._applyLight();
+
     this.ready = true;
     this.loadPiano();
+  }
+
+  _applyLight() {
+    const off = perf.light;
+    if (off === this._reverbOff) return;
+    this._reverbOff = off;
+    clearTimeout(this._bypassT);
+    if (off) {
+      // Primero se baja a 0 (sin chasquido) y luego se conecta el delay directo al compresor:
+      // con wet = 0 la reverb deja pasar el sonido tal cual, así que el cambio no se nota.
+      this.reverb.wet.rampTo(0, 0.1);
+      this._bypassT = setTimeout(() => {
+        this.delay.disconnect();
+        this.delay.connect(this.compressor);
+      }, 200);
+    } else {
+      this.delay.disconnect();
+      this.delay.connect(this.reverb);
+      this.reverb.wet.rampTo(settings.reverb, 0.1);
+    }
   }
 
   /** Precarga los pianos (principal y acompañamiento) para que la primera nota ya suene. */

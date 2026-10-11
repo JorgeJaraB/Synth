@@ -93,13 +93,19 @@ export function mount(root, params) {
       particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, color });
     }
   }
+  let particlesT = 0;
   function drawParticles(ctx) {
+    // Según el tiempo pasado (no por fotograma): la cámara dibuja a ~30 img/s y el teclado
+    // táctil a lo que dé la pantalla, y las chispas deben ir igual de rápidas en los dos.
+    const now = performance.now();
+    const k = Math.min(4, (now - (particlesT || now - 16.7)) / 16.7);
+    particlesT = now;
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.15;
-      p.life -= 0.03;
+      p.x += p.vx * k;
+      p.y += p.vy * k;
+      p.vy += 0.15 * k;
+      p.life -= 0.03 * k;
       if (p.life <= 0) {
         particles.splice(i, 1);
         continue;

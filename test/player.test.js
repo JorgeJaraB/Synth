@@ -52,3 +52,24 @@ test('Practicar: adelantarse sigue la canción pero sin puntos ni racha', () => 
   assert.equal(p.score.points, pts);
   assert.equal(p.score.streak, 0);
 });
+
+test('acordes que pone la app: no se esperan, no se puntúan y sobreviven a reiniciar', async () => {
+  const { SongPlayer } = await import('../src/core/player.js');
+  const song = { duration: 10, tracks: [], beats: [], melodyTrack: 0, lines: [] };
+  let auto = new Set([20]);
+  const practice = [{ midi: 10, time: 0.5, duration: 1 }, { midi: 20, time: 1.5, duration: 1 }, { midi: 10, time: 2.5, duration: 1 }];
+  const p = new SongPlayer(song, { practice, practiceTrack: -1, mode: 'esperar', isAuto: (n) => auto.has(n.midi) });
+  assert.equal(p.practice[1].state, 'auto');
+  assert.equal(p.playableCount, 2);
+  p.restart();
+  assert.equal(p.practice[1].state, 'auto');
+  // En Practicar no se queda esperando al acorde que pone la app
+  p.seek(1.4);
+  p.play();
+  p.update();
+  assert.ok(!p.waiting || p.waiting.every((n) => n.midi !== 20));
+  // Si el niño ya lo sabe, vuelve a ser suyo
+  auto = new Set();
+  p.refreshAuto();
+  assert.equal(p.practice[1].state, null);
+});

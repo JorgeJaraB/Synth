@@ -2,6 +2,7 @@
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { settings } from './settings.js';
 import { cameraStats } from './stats.js';
+import { perf, onPerfChange } from './perf.js';
 
 export const TIP = { thumb: 4, index: 8, middle: 12, ring: 16, pinky: 20 };
 const PIP = { thumb: 3, index: 6, middle: 10, ring: 14, pinky: 18 };
@@ -139,6 +140,20 @@ export class HandTracker {
     this._errors = 0;
     this._recovering = false;
     this._thumb = new Map();
+    this._gen = 0; // cambia con cada stop(): un start() que llega tarde ya no enciende nada
+    this._starting = null;
+    // Ventana oculta (y sin grabar): se deja de detectar y se sueltan las manos, para que no
+    // se quede sonando la última nota o el último acorde.
+    onPerfChange(() => {
+      if (perf.paused && this.hands.length) {
+        this.hands = [];
+        this._smooth.clear();
+        for (const fn of this.listeners) fn(this.hands);
+      }
+      // Al volver, las primeras imágenes no cuentan para el modo ligero automático.
+      if (!perf.paused && this._wasPaused && this.running) cameraStats.since = performance.now();
+      this._wasPaused = perf.paused;
+    });
   }
 
   onFrame(fn) {
@@ -148,6 +163,20 @@ export class HandTracker {
 
   async start() {
     if (this.running) return;
+    // Si ya se está encendiendo, se espera a ese mismo arranque (no se abren dos cámaras).
+    if (!this._starting) {
+      const gen = this._gen;
+      this._starting = this._start(gen).finally(() => {
+        if (this._gen === gen) this._starting = null;
+      });
+    }
+    return this._starting;
+  }
+
+  async _start(gen) {
+    // Si se sale de la pantalla mientras se enciende la cámara (o se carga MediaPipe),
+    // stop() ya se ha llamado: se apaga lo que se haya abierto y no se arranca nada.
+    const cancelled = () => gen !== this._gen;
     const constraints = {
       video: {
         // Resolución baja a propósito: muchas webcams de portátil solo dan 30 imágenes por
@@ -171,23 +200,40 @@ export class HandTracker {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } else throw e;
     }
+    if (cancelled()) {
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
     this.stream = stream;
     const cam = stream.getVideoTracks()[0]?.getSettings?.() || {};
     cameraStats.resolution = cam.width ? `${cam.width}×${cam.height}` : '?';
     cameraStats.cameraFps = cam.frameRate || 0;
     this.video.srcObject = stream;
-    await this.video.play();
-    this.landmarker = await getLandmarker();
+    try {
+      await this.video.play();
+      this.landmarker = await getLandmarker();
+    } catch (e) {
+      if (cancelled()) return;
+      throw e;
+    }
+    if (cancelled()) return; // stop() ya ha apagado la cámara
     this.running = true;
+    cameraStats.running = true;
+    cameraStats.since = performance.now();
     this._lastVideoTime = -1;
+    this._lastT = 0;
     this._loop();
   }
 
   stop() {
+    this._gen++;
+    this._starting = null;
     this.running = false;
+    cameraStats.running = false;
     cancelAnimationFrame(this._raf);
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
+    this.video.srcObject = null;
     this.hands = [];
   }
 
@@ -198,7 +244,8 @@ export class HandTracker {
     if (v.readyState < 2 || v.currentTime === this._lastVideoTime) return;
     this._lastVideoTime = v.currentTime;
     const now = performance.now();
-    if (this._recovering) return;
+    if (perf.paused) this._lastT = 0; // al volver no cuenta el rato en pausa en las img/s
+    if (this._recovering || perf.paused) return;
     let res;
     try {
       res = this.landmarker.detectForVideo(v, now);
@@ -266,7 +313,8 @@ export const HAND_CONNECTIONS = [
 export function drawHand(ctx, hand, w, h, color = 'rgba(255,255,255,0.9)') {
   const lm = hand.landmarks;
   ctx.save();
-  if (settings.showSkeleton) {
+  // En modo ligero solo se dibujan los puntos.
+  if (settings.showSkeleton && !perf.light) {
     ctx.strokeStyle = 'rgba(255,255,255,0.35)';
     ctx.lineWidth = 2;
     ctx.beginPath();

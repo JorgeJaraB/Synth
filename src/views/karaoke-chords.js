@@ -5,7 +5,7 @@ import { settings } from '../core/settings.js';
 import { loadSong } from '../core/library.js';
 import { SongPlayer } from '../core/player.js';
 import { chordTimeline } from '../core/harmony.js';
-import { chordNotes, chordSymbol, chordRoot, romanFor, qualityFor } from '../core/chords.js';
+import { chordNotes, chordSymbol, chordRoot, romanFor, qualityFor, restQuality } from '../core/chords.js';
 import { ChordHandReader } from '../core/chord-hands.js';
 import { noteColor, SOLFEGE, LETTERS } from '../core/notes.js';
 import { navigate } from '../router.js';
@@ -13,7 +13,7 @@ import { CameraStage } from '../ui/camera-stage.js';
 import { LyricsView } from '../ui/lyrics.js';
 import { handSvg } from '../ui/hand-svg.js';
 import { drawTiltGauge, drawOctaveGauge, drawLock } from '../ui/tilt-gauge.js';
-import { h } from '../ui/dom.js';
+import { h, settingToggle } from '../ui/dom.js';
 import { Transport, speedSelect, toggleButton, accompanimentControl, lyricsToggle, modeSelector, scoreBox, resultOverlay } from '../ui/transport.js';
 
 const HAND_SHAPES = ['i', 'im', 'ima', 'imae', 'pimae', 'ie', 'pie'];
@@ -40,16 +40,31 @@ const BACKING_GAIN = 0.6;
 
 /** Imágenes de las manos (SVG → imagen) para dibujarlas en el canvas. */
 const handImages = new Map();
-function handImage(degree) {
-  const side = settings.chordLefty ? 'derecha' : 'izquierda';
-  const key = degree + side;
+function handImage(degree, { shape = HAND_SHAPES[degree - 1], expr = false, tilt = 0, size = 80 } = {}) {
+  const chordSide = settings.chordLefty ? 'derecha' : 'izquierda';
+  const side = expr ? (chordSide === 'izquierda' ? 'derecha' : 'izquierda') : chordSide;
+  const key = [shape, side, tilt, size].join('|');
   if (!handImages.has(key)) {
     const img = new Image();
-    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(handSvg(HAND_SHAPES[degree - 1], { side, size: 80 }).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '));
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(handSvg(shape, { side, size, tilt }).replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" '));
     handImages.set(key, img);
   }
   return handImages.get(key);
 }
+
+/** Clave de un acorde para "los acordes que sabe hacer": grado y calidad ("6menor"). */
+const knowKey = (c) => c.degree + (c.quality === 'dim' && settings.chordStraight !== 'natural' ? 'menor' : c.quality);
+/** ¿Lo toca la app sola? (el niño todavía no sabe hacer ese acorde) */
+const isAutoChord = (c) => (settings.kcUnknown || []).includes(knowKey(c));
+// Volumen de los acordes que pone la app sola
+const AUTO_VOLUME = 0.7;
+/** Inclinación de la mano guía para que suene mayor o menor (como en el tutorial). */
+function guideTilt(c) {
+  const q = c.quality === 'dim' && settings.chordStraight !== 'natural' ? 'menor' : c.quality;
+  if (q === restQuality(c.degree, settings.chordStraight)) return 0;
+  return q === 'mayor' ? 28 : -28;
+}
+const EXPR_SHAPE = { triada: 'i', inversion: 'im', septima: 'ima', dominante: 'imae' };
 
 export function mount(root, params) {
   let player = null;
@@ -99,6 +114,7 @@ export function mount(root, params) {
     ],
   });
   const titleEl = h('h2.song-title', 'Cargando…');
+  let helpBtn;
   const keyEl = h('span.key-badge');
   const toolbar = h(
     'div.view-toolbar.wrap',
@@ -106,6 +122,7 @@ export function mount(root, params) {
     titleEl,
     keyEl,
     h('div.spacer'),
+    (helpBtn = h('button.btn.help-btn', { title: 'Ayuda para los niños más pequeños', onclick: () => toggleHelp() }, '🧸 Ayuda')),
     modeSelector(mode, (m) => {
       mode = m;
       player.mode = m;
@@ -116,7 +133,58 @@ export function mount(root, params) {
   const nowCard = h('div.kc-now');
   const lyricsHost = h('div.kc-lyrics');
   lyricsHost.hidden = !settings.showLyrics;
-  const stageWrap = h('div.stage-wrap', nowCard, lyricsHost);
+  // ---------- Ayuda para los peques ----------
+  const knownList = h('div.known-list');
+  const helpPanel = h('div.kc-help', { hidden: true },
+    h('div.kc-help-head', h('b', '🧸 Ayuda para los peques'), h('button.btn.icon.small', { title: 'Cerrar', onclick: () => toggleHelp(false) }, '✕')),
+    settingToggle('🔇 Si se equivoca, no suena (solo suena el acorde correcto)', 'kcOnlyCorrect', refreshHelp),
+    settingToggle('👻 Manos guía en grande sobre la cámara', 'kcHolograms', refreshHelp),
+    h('details.known', { open: (settings.kcUnknown || []).length > 0 },
+      h('summary', '🎓 Acordes que sabe hacer'),
+      h('p.muted.small', 'Los que no estén marcados los toca la app sola: así se aprenden poco a poco.'),
+      knownList,
+      h('div.row.known-actions',
+        h('button.btn.small', { onclick: () => setUnknown(songKeys(), false) }, '✅ Todos'),
+        h('button.btn.small', { onclick: () => setUnknown(songKeys(), true) }, '⬜ Ninguno'),
+      ),
+    ),
+  );
+  function toggleHelp(force) {
+    helpPanel.hidden = force == null ? !helpPanel.hidden : !force;
+    if (!helpPanel.hidden) renderKnown();
+  }
+  function refreshHelp() {
+    helpBtn?.classList.toggle('on', settings.kcOnlyCorrect || settings.kcHolograms || chords.some(isAutoChord));
+    player?.refreshAuto();
+    shownKey = '';
+  }
+  const songKeys = () => [...new Set(chords.map(knowKey))];
+  /** Marca acordes como "aún no los sabe" (los toca la app) o como sabidos. */
+  function setUnknown(keys, unknown) {
+    const set = new Set(settings.kcUnknown || []);
+    for (const k of keys) unknown ? set.add(k) : set.delete(k);
+    settings.kcUnknown = [...set];
+    renderKnown();
+    refreshHelp();
+  }
+  /** Una casilla por acorde de la canción, en el orden en que aparecen. */
+  function renderKnown() {
+    const seen = new Map();
+    for (const c of chords) if (!seen.has(knowKey(c))) seen.set(knowKey(c), c);
+    knownList.replaceChildren(
+      ...[...seen.entries()].map(([k, c]) => {
+        const input = h('input', { type: 'checkbox', checked: !isAutoChord(c), onchange: () => setUnknown([k], !input.checked) });
+        return h('label.known-item', { style: { '--c': noteColor(chordRoot(tonic, c.degree)) } },
+          input,
+          h('span.known-hand', { html: handSvg(HAND_SHAPES[c.degree - 1], { side: settings.chordLefty ? 'derecha' : 'izquierda', size: 34, tilt: guideTilt(c) }) }),
+          h('b', romanFor(c.degree, c.quality)),
+          h('span', chordSymbol(tonic, c.degree, c.quality, 'triada', settings.notation)),
+        );
+      }),
+    );
+  }
+
+  const stageWrap = h('div.stage-wrap', nowCard, lyricsHost, helpPanel);
   const view = h('div.view.tutorial', toolbar, h('div.tutorial-body', stageWrap), transport.el);
   root.append(view);
 
@@ -130,7 +198,7 @@ export function mount(root, params) {
     const expected = player.expectedNow?.()[0];
     const cur = expected || player.practice.find((c) => c.time <= t + 0.05 && c.time + c.duration > t) || player.practice.find((c) => c.time > t);
     const next = cur ? player.practice.find((c) => c.time > cur.time) : null;
-    const key = (cur?.id ?? '-') + '/' + (next?.id ?? '-') + settings.notation;
+    const key = (cur?.id ?? '-') + '/' + (next?.id ?? '-') + settings.notation + (cur?.state === 'auto') + (next?.state === 'auto');
     if (key === shownKey) return;
     shownKey = key;
     const block = (c, big) =>
@@ -138,7 +206,8 @@ export function mount(root, params) {
         ? h('div.kc-chord', { class: big ? 'big' : '', style: { '--c': noteColor(chordRoot(tonic, c.degree)) } },
             h('div.kc-hand', { html: handSvg(HAND_SHAPES[c.degree - 1], { side: settings.chordLefty ? 'derecha' : 'izquierda', size: big ? 96 : 60 }) }),
             h('div', h('b', romanFor(c.degree, c.quality)), h('span', chordSymbol(tonic, c.degree, c.quality, c.voicing || 'triada', settings.notation)), h('small.kc-quality', QUALITY_WORD[c.quality]),
-              big && VOICING_HINT[c.voicing] ? h('small.kc-quality', VOICING_HINT[c.voicing]) : null),
+              big && VOICING_HINT[c.voicing] ? h('small.kc-quality', VOICING_HINT[c.voicing]) : null,
+              c.state === 'auto' ? h('small.kc-quality', '🎵 lo toca la app') : null),
           )
         : null;
     nowCard.replaceChildren(
@@ -149,6 +218,69 @@ export function mount(root, params) {
         block(next, false),
       ].filter(Boolean),
     );
+  }
+
+  /** Acorde de la canción que suena ahora (o el que se espera en Practicar). */
+  function currentChord() {
+    const t = player.time;
+    return player.expectedNow?.()[0] || player.practice.find((c) => c.time <= t + 0.05 && c.time + c.duration > t) || null;
+  }
+  /** ¿Es el acorde que toca ahora? (o el siguiente, si está a punto de llegar) */
+  function rightChord(st) {
+    const code = chordCode(st.degree, st.quality);
+    const t = player?.time ?? 0;
+    const cur = player ? currentChord() : null;
+    if (cur && chordCode(cur.degree, cur.quality) === code) return true;
+    const next = player?.practice.find((c) => c.time > t);
+    return !!next && next.time - t < 0.35 && chordCode(next.degree, next.quality) === code;
+  }
+
+  // ---------- Manos guía ("hologramas") en grande sobre la cámara ----------
+  function drawGuide(ctx, w, hh) {
+    const t = player.time;
+    const cur = currentChord();
+    // Si el acorde de ahora lo pone la app, se enseña el siguiente que le toca al niño.
+    const target = cur && cur.state !== 'auto' ? cur : player.practice.find((c) => c.time > t && c.state !== 'auto');
+    if (!target) return;
+    const preparing = target !== cur;
+    const size = Math.round(Math.min(hh * 0.5, w * 0.3));
+    const col = noteColor(chordRoot(tonic, target.degree));
+    const chordOnLeft = !settings.chordLefty;
+    const cx = w * (chordOnLeft ? 0.27 : 0.73);
+    const cy = hh * 0.52;
+    const pulse = 0.5 + 0.08 * Math.sin(performance.now() / 300);
+    ctx.save();
+    ctx.globalAlpha = preparing ? 0.3 : pulse;
+    ctx.shadowColor = col;
+    ctx.shadowBlur = 40;
+    const img = handImage(target.degree, { tilt: guideTilt(target), size: 256 });
+    if (img.complete) ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
+    // La otra mano: cuántos dedos (más si el acorde lleva séptima)
+    const exprImg = handImage(target.degree, { shape: EXPR_SHAPE[target.voicing] || 'i', expr: true, size: 256 });
+    const ex = w * (chordOnLeft ? 0.73 : 0.27);
+    ctx.globalAlpha = (preparing ? 0.2 : 0.32);
+    if (exprImg.complete) ctx.drawImage(exprImg, ex - size * 0.35, cy - size * 0.35, size * 0.7, size * 0.7);
+    ctx.globalAlpha = preparing ? 0.6 : 0.95;
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${Math.round(size * 0.16)}px Nunito, system-ui, sans-serif`;
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = 6;
+    const text = (cur?.state === 'auto' ? '🎵 Toca la app · Prepárate: ' : preparing ? 'Prepárate: ' : '') + chordSymbol(tonic, target.degree, target.quality, target.voicing || 'triada', settings.notation);
+    // El nombre va encima de la mano (debajo están la letra y la barra de inclinación).
+    const ty = cy - size / 2 - size * 0.06;
+    ctx.strokeText(text, cx, ty);
+    ctx.fillText(text, cx, ty);
+    const tilt = guideTilt(target);
+    if (tilt) {
+      ctx.font = `800 ${Math.round(size * 0.09)}px Nunito, system-ui, sans-serif`;
+      const hint = tilt < 0 ? '↔️ inclínala hacia fuera' : '↔️ inclínala hacia dentro';
+      ctx.strokeText(hint, cx, ty + size * 0.13);
+      ctx.fillText(hint, cx, ty + size * 0.13);
+    }
+    ctx.restore();
   }
 
   // ---------- Cinta de acordes ----------
@@ -166,7 +298,7 @@ export function mount(root, params) {
       const x1 = nowX + (c.time - t) * pps;
       const x2 = nowX + (c.time + c.duration - t) * pps;
       if (x2 < 0 || x1 > w) continue;
-      const col = c.state === 'miss' ? '#6b6f80' : noteColor(chordRoot(tonic, c.degree));
+      const col = c.state === 'miss' || c.state === 'auto' ? '#6b6f80' : noteColor(chordRoot(tonic, c.degree));
       ctx.globalAlpha = c.state === 'hit' ? 1 : 0.88;
       ctx.fillStyle = col;
       ctx.beginPath();
@@ -192,7 +324,7 @@ export function mount(root, params) {
         ctx.font = '900 22px Nunito, system-ui, sans-serif';
         ctx.fillText(romanFor(c.degree, c.quality), tx, top + 22);
         ctx.font = '800 15px Nunito, system-ui, sans-serif';
-        ctx.fillText(chordSymbol(tonic, c.degree, c.quality, c.voicing || 'triada', settings.notation) + (c.state === 'hit' ? (c.early ? ' ⏩' : ' ✓') : ''), tx, top + 46);
+        ctx.fillText(chordSymbol(tonic, c.degree, c.quality, c.voicing || 'triada', settings.notation) + (c.state === 'hit' ? (c.early ? ' ⏩' : ' ✓') : c.state === 'auto' ? ' 🎵' : ''), tx, top + 46);
       }
     }
     ctx.fillStyle = 'rgba(255,200,60,0.95)';
@@ -211,9 +343,18 @@ export function mount(root, params) {
       const listening = player?.mode === 'escuchar';
       if (voice) {
         // En "Escuchar" suenan los acordes originales de la canción; si no, los del alumno.
-        if (stable && !listening) voice.setChord(chordNotes(tonic, stable.degree, stable.quality, stable.voicing, stable.octave));
-        else voice.silence();
-        voice.setVolume(stable && !listening ? r.volume : 0);
+        const cur = player ? currentChord() : null;
+        if (!listening && cur?.state === 'auto') {
+          // Acorde que el niño aún no sabe: lo pone la app.
+          voice.setChord(chordNotes(tonic, cur.degree, cur.quality, cur.voicing || 'triada'));
+          voice.setVolume(player.playing ? AUTO_VOLUME : 0);
+        } else {
+          // Con "solo el correcto", un acorde equivocado no suena (nunca queda disonante).
+          const ok = stable && !listening && (!settings.kcOnlyCorrect || rightChord(stable));
+          if (ok) voice.setChord(chordNotes(tonic, stable.degree, stable.quality, stable.voicing, stable.octave));
+          else voice.silence();
+          voice.setVolume(ok ? r.volume : 0);
+        }
         voice.setBrightness(r.brightness);
       }
       // Se recuerda cuándo empezó el alumno a hacer el acorde actual (para no premiar adelantarse).
@@ -226,6 +367,7 @@ export function mount(root, params) {
       const fistMuted = r.expr && r.exprMuted;
       if (player && stable && !fistMuted && !listening) player.input(code, { penalize: false, since: heldSince });
       drawLane(ctx, w);
+      if (settings.kcHolograms && player && !listening) drawGuide(ctx, w, hh);
       // Casi: el grado está bien pero falta cambiar entre mayor y menor
       const want = player?.expectedNow?.()[0] || player?.practice.find((c) => !c.state && c.time <= player.time + 0.05 && c.time + c.duration > player.time);
       const nearMiss = !listening && stable && want && want.degree === stable.degree && chordCode(want.degree, want.quality) !== code;
@@ -277,7 +419,7 @@ export function mount(root, params) {
     // Por defecto se callan las pistas de acompañamiento (los acordes los pone el alumno);
     // con "Piano de la canción" suenan también, para canciones donde importa más la melodía.
     harmonyTracks = song.tracks.filter((t) => !t.isDrum && t.index !== melodyTrack).map((t) => t.index);
-    player = new SongPlayer(song, { practiceTrack: -1, practice, mode, muted: settings.kcOriginalBacking ? [] : harmonyTracks, accGain: settings.kcOriginalBacking ? BACKING_GAIN : 1 });
+    player = new SongPlayer(song, { practiceTrack: -1, practice, mode, isAuto: isAutoChord, muted: settings.kcOriginalBacking ? [] : harmonyTracks, accGain: settings.kcOriginalBacking ? BACKING_GAIN : 1 });
     if (import.meta.env.DEV) window.__kc = { player, chords, get reader() { return reader; }, get voice() { return voice; } };
     player.on('early', () => say(player.mode === 'tiempo' ? '⏩ ¡Muy pronto! Cambia de acorde cuando llegue a la línea' : '⏩ Te has adelantado: espera a que llegue a la línea'));
     player.on('end', () => {
@@ -291,6 +433,7 @@ export function mount(root, params) {
       lyrics.setChords(chords, label);
     }
     if (!chords.length) nowCard.replaceChildren(h('p', 'No se han encontrado acordes en esta canción.'));
+    refreshHelp();
     player.play();
   })();
 

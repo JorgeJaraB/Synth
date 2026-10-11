@@ -21,6 +21,7 @@ export const DEFAULTS = {
   mirror: true,
   showSkeleton: true,
   cameraId: '',
+  lightMode: 'auto', // modo ligero para equipos lentos: 'auto' | 'on' | 'off'
   recordMic: false, // grabar también el micrófono (para el karaoke)
   // Acordes con gestos
   chordKey: 0, // tonalidad: 0 = Do, 2 = Re, 7 = Sol...
@@ -52,6 +53,10 @@ export const DEFAULTS = {
   accompaniment: true,
   showLyrics: true, // letra visible en tutoriales y karaoke de acordes
   accompanimentVolume: 0.6,
+  // Karaoke de acordes: ayuda para los peques
+  kcOnlyCorrect: false, // si se equivocan de acorde no suena nada (nunca disonante)
+  kcHolograms: false, // manos guía en grande sobre la cámara
+  kcUnknown: [], // acordes que el niño aún no sabe hacer ("1mayor", "6menor"…): los toca la app
   kcOriginalBacking: false, // karaoke de acordes: que suene también el piano original de la canción
   metronome: false,
   lookahead: 3, // segundos de notas visibles cayendo

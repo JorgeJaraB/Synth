@@ -1,6 +1,7 @@
 // Sintetizador con las manos: cada dedo índice es una voz; la altura elige la nota.
 import { audio, INSTRUMENTS } from '../core/audio.js';
 import { settings, onSettingsChange } from '../core/settings.js';
+import { perf } from '../core/perf.js';
 import { scaleNotes, SCALES, noteName, noteColor, SOLFEGE, LETTERS } from '../core/notes.js';
 import { TIP } from '../core/hands.js';
 import { CameraStage } from '../ui/camera-stage.js';
@@ -75,6 +76,7 @@ export function drawLanes(ctx, w, lanes, area, active = new Set(), targets = new
 
 /** Onda del sonido, brillante como en el vídeo. */
 export function drawWave(ctx, w, hh, rgb = null) {
+  if (perf.light) return; // decorativa: en modo ligero no se dibuja
   const data = audio.getWaveform();
   if (!data) return;
   const level = audio.getLevel();

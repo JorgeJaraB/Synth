@@ -18,7 +18,10 @@ export class SongPlayer {
   constructor(song, opts = {}) {
     this.song = song;
     this.practiceTrack = opts.practiceTrack ?? song.melodyTrack;
+    // isAuto(n): notas que no toca el alumno (las pone la app): no se esperan ni se puntúan.
+    this.isAuto = opts.isAuto || (() => false);
     this.practice = (opts.practice || song.tracks[this.practiceTrack]?.notes || []).map((n, i) => ({ ...n, id: i, state: null }));
+    this.refreshAuto();
     this.mode = opts.mode || 'escuchar';
     this.instrument = opts.instrument || settings.pianoInstrument;
     this.muted = new Set(opts.muted || []);
@@ -75,7 +78,7 @@ export class SongPlayer {
   seek(t) {
     this.time = Math.max(-1.5, Math.min(t, this.duration));
     this.waiting = null;
-    for (const n of this.practice) if (n.time >= this.time) n.state = null;
+    for (const n of this.practice) if (n.time >= this.time) n.state = this.isAuto(n) ? 'auto' : null;
     audio.releaseAll();
     this._resetPointers();
     this._last = audio.now();
@@ -83,8 +86,22 @@ export class SongPlayer {
 
   restart() {
     this.score = { hits: 0, misses: 0, streak: 0, best: 0, points: 0 };
-    for (const n of this.practice) n.state = null;
+    for (const n of this.practice) n.state = this.isAuto(n) ? 'auto' : null;
     this.seek(-1.5);
+  }
+
+  /** Vuelve a marcar qué notas pone la app (al cambiar isAuto a mitad de canción). */
+  refreshAuto() {
+    for (const n of this.practice) {
+      if (this.isAuto(n)) n.state = n.state === 'hit' || n.state === 'miss' ? n.state : 'auto';
+      else if (n.state === 'auto') n.state = null;
+    }
+    if (this.waiting?.every((n) => n.state === 'auto')) this.waiting = null;
+  }
+
+  /** Cuántas notas toca el alumno (para la puntuación final). */
+  get playableCount() {
+    return this.practice.filter((n) => n.state !== 'auto').length;
   }
 
   /** Notas que el alumno debe tocar ahora mismo (modo esperar). */

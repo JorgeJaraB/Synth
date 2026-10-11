@@ -6,6 +6,8 @@ export const cameraStats = {
   detectFps: 0, // imágenes por segundo que se analizan de verdad
   detectMs: 0, // lo que tarda el detector en cada imagen
   delegate: '', // 'GPU' (tarjeta gráfica) o 'CPU' (procesador, más lento)
+  running: false, // el detector está en marcha ahora
+  since: 0, // cuándo empezó (performance.now()), para ignorar las primeras imágenes
 };
 
 export function cameraStatsText() {

@@ -2,6 +2,7 @@
 // las coordenadas de las manos a coordenadas de pantalla.
 import { tracker, drawHand } from '../core/hands.js';
 import { settings } from '../core/settings.js';
+import { watchPerf, frameGate } from '../core/perf.js';
 import { h, fitCanvas } from './dom.js';
 
 export class CameraStage {
@@ -19,6 +20,8 @@ export class CameraStage {
     this.alive = true;
     this.map = { dx: 0, dy: 0, sw: 1, sh: 1 };
     this.unsub = tracker.onFrame((hands) => (this.hands = hands));
+    this._next = 0; // cuándo toca el siguiente dibujo
+    watchPerf();
     this._start();
     this._loop();
   }
@@ -59,6 +62,11 @@ export class CameraStage {
   _loop() {
     if (!this.alive) return;
     requestAnimationFrame(() => this._loop());
+    // La cámara da ~30 imágenes por segundo: no hace falta redibujar a 60–144 Hz.
+    // (onDraw/afterDraw de cada pantalla van aquí dentro, así que también se limitan.)
+    const next = frameGate(this._next, performance.now());
+    if (next == null) return;
+    this._next = next;
     const { ctx, w, h: hh } = fitCanvas(this.canvas);
     this.w = w;
     this.h = hh;

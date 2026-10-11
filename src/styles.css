@@ -2055,3 +2055,64 @@ body.recording.clase .rec-float {
   flex: 1;
   min-width: 0;
 }
+
+/* Karaoke de acordes: ayuda para los peques */
+.help-btn.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.kc-help {
+  position: absolute;
+  top: 84px;
+  right: 12px;
+  z-index: 6;
+  width: min(380px, calc(100% - 24px));
+  max-height: calc(100% - 100px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kc-help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 1.05rem;
+}
+.kc-help details.known summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+.known-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 8px 0;
+}
+.known-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border-left: 5px solid var(--c);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.known-item input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+.known-hand {
+  display: inline-flex;
+}
+.known-actions {
+  gap: 6px;
+}

@@ -1,5 +1,6 @@
 // Informe de problemas: guarda los últimos errores y prepara una incidencia (issue) en GitHub.
-import { cameraStatsText } from './stats.js';
+import { cameraStatsText, cameraStats } from './stats.js';
+import { perfText } from './perf.js';
 import { settings } from './settings.js';
 import { currentName } from '../router.js';
 
@@ -43,6 +44,27 @@ const VIEW_NAMES = {
   'karaoke-chords': 'Karaoke de acordes', 'song-editor': 'Crear canción', settings: 'Ajustes',
 };
 
+/**
+ * Nombre de la tarjeta gráfica (p. ej. "ANGLE (Intel, Intel(R) UHD Graphics 620 …)"), para saber
+ * en qué equipos va lento. Solo el modelo: nada personal. Se usa un canvas de usar y tirar.
+ */
+let gpuName = null;
+export function gpuRenderer() {
+  if (gpuName != null) return gpuName;
+  gpuName = '?';
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    if (gl) {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      gpuName = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '?').slice(0, 200);
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    } else gpuName = 'sin WebGL';
+  } catch {
+    /* sin datos */
+  }
+  return gpuName;
+}
+
 /** Texto del informe en Markdown (lo que se verá en la incidencia). */
 export function buildReport(description, { technical = true } = {}) {
   const lines = ['## ¿Qué ha pasado?', description.trim() || '_(sin descripción)_', ''];
@@ -58,6 +80,9 @@ export function buildReport(description, { technical = true } = {}) {
       `- Resolución: ${window.screen.width}×${window.screen.height} · ventana ${window.innerWidth}×${window.innerHeight}`,
       `- Ajustes: notas=${s.notation}, volumen=${s.masterVolume}, sintetizador=${s.synthInstrument}/${s.synthPitchMode}/${s.synthTrigger}, acordes=${s.chordInstrument}${s.chordLefty ? ' (zurdo)' : ''}, piano aire=${s.airPianoOctaves} oct. ${s.airPianoMode === 'extender' ? 'extender ' + s.airPianoPosition : 'pulsar ' + s.airPianoSensitivity}`,
       `- Cámara: ${cameraStatsText()}`,
+      `- Detector de manos: ${cameraStats.delegate === 'GPU' ? 'GPU (tarjeta gráfica)' : cameraStats.delegate === 'CPU' ? 'CPU (procesador)' : 'sin cargar todavía'}`,
+      `- Tarjeta gráfica: ${gpuRenderer()}`,
+      `- Rendimiento: ${perfText()}`,
       '',
       '## Últimos errores',
       errors.length ? '```\n' + errors.map((e) => `[${e.time}] ${e.kind}: ${e.text}`).join('\n') + '\n```' : '_Ninguno registrado._',

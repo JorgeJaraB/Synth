@@ -24,6 +24,11 @@ contextBridge.exposeInMainWorld('synthAPI', {
     ipcRenderer.on('update:status', listener);
     return () => ipcRenderer.removeListener('update:status', listener);
   },
+  onWindowVisible: (fn) => {
+    const listener = (_e, visible) => fn(!!visible);
+    ipcRenderer.on('win:visible', listener);
+    return () => ipcRenderer.removeListener('win:visible', listener);
+  },
   recStart: (ext) => ipcRenderer.invoke('rec:start', ext),
   recChunk: (id, bytes) => ipcRenderer.invoke('rec:chunk', id, bytes),
   recEnd: (id) => ipcRenderer.invoke('rec:end', id),
