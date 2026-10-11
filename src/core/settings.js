@@ -30,7 +30,8 @@ export const DEFAULTS = {
   chordStraight: 'mayor', // mano recta: 'mayor' en todos los grados (como Gesture Synth) | 'natural' (el de la escala)
   chordOctaveTurn: true, // girar la mano derecha sube o baja una octava
   chordThumbLock: false, // experimento: sacar el pulgar derecho fija el acorde (candado)
-  chordLefty: false, // zurdo/a: la mano derecha elige el acorde
+  chordLefty: false,
+  thumbDebug: false, // enseñar las medidas del pulgar sobre la cámara (para ajustarlo) // zurdo/a: la mano derecha elige el acorde
   chordArpeggio: false,
   chordProgression: 'ninguna',
   chordTutorialDone: false,

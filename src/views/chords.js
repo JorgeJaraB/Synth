@@ -81,11 +81,13 @@ export function mount(root) {
     );
     const other = settings.chordLefty ? 'izquierda' : 'derecha';
     exprLegend.replaceChildren(
+      ...[
       ...[['i', '1 dedo', 'acorde normal'], ['im', '2 dedos', '1.ª inversión'], ['ima', '3 dedos', 'con séptima'], ['imae', '4 dedos', 'dominante / disminuido'], ['', 'puño', 'silencio']].map(([shape, n, txt]) =>
         h('div.legend-row.expr-row', h('span.legend-sign', { html: handSvg(shape, { side: other, size: 38 }) }), h('span.legend-text', n), h('span.legend-chord', txt)),
       ),
       h('p.legend-tip', settings.chordOctaveTurn ? '↕️ Altura: volumen · 🔄 Girar: octava' : '↕️ Altura: volumen · ↔️ Inclinar: brillo'),
       settings.chordThumbLock ? h('p.legend-tip', '👍 Pulgar fuera: 🔒 fija el acorde') : null,
+      ].filter(Boolean),
     );
     chordLegendCard.setTitle(settings.chordLefty ? '✋ Mano derecha: el acorde' : '✋ Mano izquierda: el acorde');
     exprLegendCard.setTitle(settings.chordLefty ? '🤚 Mano izquierda: cómo suena' : '🤚 Mano derecha: cómo suena');
@@ -132,6 +134,7 @@ export function mount(root) {
     settingSelect('Progresión para practicar', 'chordProgression', Object.entries(PROGRESSIONS).map(([k, v]) => [k, v.name]), renderProgression),
     settingSelect('Nombres de las notas', 'notation', [['solfeo', 'Do, Re, Mi'], ['letras', 'C, D, E'], ['colores', 'Colores']], onChange),
     settingRange('Eco de sala (reverb)', 'reverb'),
+    settingToggle('🔧 Ver cómo detecta el pulgar (para ajustarlo)', 'thumbDebug'),
     h('p.muted.credit', 'Idea inspirada en «Gesture Synth» de Eric Wei (indecisive.eric).'),
   );
 
@@ -263,7 +266,8 @@ export function mount(root) {
       drawChordCard(ctx, w, hh, stable, col);
       drawVolume(ctx, w, hh);
     },
-    afterDraw(ctx) {
+    afterDraw(ctx, w, hh, hands, st) {
+      if (settings.thumbDebug) drawThumbDebug(ctx, hands || [], st);
       if (chordHandInfo) {
         const { pos, degree, tilt: tl, onLeft } = chordHandInfo;
         const ok = degree >= 1 && degree <= 7;
@@ -307,6 +311,28 @@ export function mount(root) {
       }
     },
   });
+
+  /** Medidas del pulgar junto a cada mano: así se puede ver por qué lo da por fuera o dentro. */
+  function drawThumbDebug(ctx, hands, st) {
+    for (const hd of hands) {
+      if (!st?.toScreen) return;
+      const p = st.toScreen(hd.landmarks[4]);
+      const ti = hd.thumbInfo;
+      const text = (hd.extended.thumb ? '👍 FUERA' : '✊ dentro') + (ti ? ` · lejos ${ti.far.toFixed(2)} · recto ${ti.straight.toFixed(2)}` : ' · sin 3D');
+      ctx.save();
+      ctx.font = '800 14px Nunito, system-ui, sans-serif';
+      const tw = ctx.measureText(text).width + 14;
+      ctx.fillStyle = hd.extended.thumb ? 'rgba(255,160,30,0.9)' : 'rgba(10,11,25,0.8)';
+      ctx.beginPath();
+      ctx.roundRect(p.x - tw / 2, p.y - 40, tw, 24, 8);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, p.x, p.y - 28);
+      ctx.restore();
+    }
+  }
 
   function drawChordCard(ctx, w, hh, state, col) {
     const cx = w / 2;

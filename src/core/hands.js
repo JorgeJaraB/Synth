@@ -3,6 +3,7 @@ import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { settings } from './settings.js';
 import { cameraStats } from './stats.js';
 import { perf, onPerfChange } from './perf.js';
+import { thumbOut3D, thumbMetrics } from './thumb.js';
 
 export const TIP = { thumb: 4, index: 8, middle: 12, ring: 16, pinky: 20 };
 const PIP = { thumb: 3, index: 6, middle: 10, ring: 14, pinky: 18 };
@@ -109,7 +110,9 @@ export function analyzeHand(lm, world = null, prevThumb = false) {
   for (const f of ['index', 'middle', 'ring', 'pinky']) {
     extended[f] = d(P[0], P[TIP[f]]) > d(P[0], P[PIP[f]]) * 1.12;
   }
-  extended.thumb = thumbOut(lm, prevThumb);
+  // Con puntos 3D, además de salir por el lado en la imagen, el pulgar tiene que estar fuera de
+  // verdad (lejos del índice y estirado).
+  extended.thumb = world ? thumbOut(lm, prevThumb) && thumbOut3D(world, prevThumb) : thumbOut(lm, prevThumb);
   // Mano cerrada de verdad (puño): las puntas vuelven hacia la palma, más cerca de la muñeca
   // que los nudillos. Una mano de piano, con los dedos curvados, no cuenta como cerrada.
   const curled = ['index', 'middle', 'ring', 'pinky'].filter((f) => d(P[0], P[TIP[f]]) < d(P[0], P[MCP[f]]) * 0.95).length;
@@ -122,6 +125,7 @@ export function analyzeHand(lm, world = null, prevThumb = false) {
     pinchDist,
     fist: nExt === 0, // puño aunque el pulgar quede por fuera
     closed: curled >= 3,
+    thumbInfo: world ? thumbMetrics(world) : null, // para la ayuda de ajuste (medidas del pulgar)
     indexUp: extended.index,
     openHand: nExt >= 4,
   };
