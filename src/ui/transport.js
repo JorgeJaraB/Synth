@@ -123,7 +123,7 @@ export function scoreBox() {
 /** Pantalla de resultado al acabar la canción. */
 export function resultOverlay(parent, player, { onReplay, onBack }) {
   const s = player.score;
-  const total = player.practice.length || 1;
+  const total = player.playableCount || player.practice.length || 1;
   const ratio = s.hits / total;
   const stars = player.mode === 'tiempo' ? (ratio > 0.9 ? 3 : ratio > 0.65 ? 2 : ratio > 0.3 ? 1 : 0) : 3;
   const msg = stars === 3 ? '¡Fantástico!' : stars === 2 ? '¡Muy bien!' : stars === 1 ? '¡Buen intento!' : '¡Sigue practicando!';

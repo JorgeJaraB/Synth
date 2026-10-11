@@ -53,6 +53,10 @@ export const DEFAULTS = {
   accompaniment: true,
   showLyrics: true, // letra visible en tutoriales y karaoke de acordes
   accompanimentVolume: 0.6,
+  // Karaoke de acordes: ayuda para los peques
+  kcOnlyCorrect: false, // si se equivocan de acorde no suena nada (nunca disonante)
+  kcHolograms: false, // manos guía en grande sobre la cámara
+  kcUnknown: [], // acordes que el niño aún no sabe hacer ("1mayor", "6menor"…): los toca la app
   kcOriginalBacking: false, // karaoke de acordes: que suene también el piano original de la canción
   metronome: false,
   lookahead: 3, // segundos de notas visibles cayendo
