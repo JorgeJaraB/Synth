@@ -5,32 +5,44 @@ import { cameraStats } from './stats.js';
 
 // Umbrales del modo automático. Con histéresis: para encenderlo hace falta ir lento un rato
 // seguido y el contador solo se reinicia cuando va claramente bien (no en la zona intermedia).
+// Solo cuenta con la ventana delante: tapada o en segundo plano, Windows y Chromium frenan la
+// app y parecería lenta sin serlo (se activaba en equipos rápidos).
 export const AUTO_LIGHT = {
-  slowMs: 40, // el detector tarda más de esto por imagen…
-  slowFps: 18, // …o analiza menos imágenes por segundo que esto
-  okMs: 30, // va claramente bien por debajo de esto…
+  slowMs: 45, // el detector tarda más de esto por imagen…
+  slowFps: 15, // …o analiza menos imágenes por segundo que esto…
+  minMsForFps: 30, // …tardando bastante (pocas img/s con un detector rápido = cámara lenta, no el equipo)
+  okMs: 28, // va claramente bien por debajo de esto…
   okFps: 22, // …y por encima de esto
-  minMsForFps: 20, // pocas img/s con un detector rápido = cámara lenta (poca luz), no el equipo
-  holdMs: 4000, // tiempo seguido yendo lento antes de activarlo
-  warmupMs: 3000, // al encender la cámara las primeras imágenes son lentas (se ignoran)
+  holdMs: 5000, // tiempo seguido yendo lento antes de activarlo
+  offMs: 20000, // tiempo seguido yendo bien para volver a quitarlo
+  warmupMs: 5000, // al encender la cámara las primeras imágenes son lentas (se ignoran)
 };
 
 /**
  * Un paso de la decisión automática (función pura, para los tests).
- * @param st  { on, slowSince }  estado anterior
- * @param s   { detectMs, detectFps, running, since }  datos del detector (since = cuándo empezó)
+ * @param st  { on, slowSince, okSince }  estado anterior
+ * @param s   { detectMs, detectFps, running, since, active }  datos del detector (since = cuándo
+ *            empezó; active = la ventana está delante y visible)
  * @param now  ms
- * Una vez activado se queda activado toda la sesión (no va y viene).
  */
 export function autoLightStep(st, s, now, o = AUTO_LIGHT) {
-  if (st.on) return st;
-  if (!s.running || !s.since || now - s.since < o.warmupMs || !s.detectFps) return { on: false, slowSince: null };
+  const idle = { on: st.on, slowSince: null, okSince: null };
+  if (!s.running || !s.since || now - s.since < o.warmupMs || !s.detectFps || s.active === false) return idle;
   const slow = s.detectMs > o.slowMs || (s.detectFps < o.slowFps && s.detectMs > o.minMsForFps);
   const ok = s.detectMs < o.okMs && s.detectFps >= o.okFps;
-  let slowSince = st.slowSince;
+  let slowSince = st.slowSince ?? null;
+  let okSince = st.okSince ?? null;
   if (slow) slowSince ??= now;
   else if (ok) slowSince = null;
-  return { on: slowSince != null && now - slowSince >= o.holdMs, slowSince };
+  if (ok) okSince ??= now;
+  else okSince = null;
+  let on = st.on;
+  if (!on && slowSince != null && now - slowSince >= o.holdMs) on = true;
+  if (on && okSince != null && now - okSince >= o.offMs) {
+    on = false;
+    slowSince = null;
+  }
+  return { on, slowSince, okSince };
 }
 
 /**
@@ -65,16 +77,18 @@ function update() {
   for (const fn of listeners) fn(perf);
 }
 
-let auto = { on: false, slowSince: null };
+let auto = { on: false, slowSince: null, okSince: null };
 let timer = null;
 
 /** Empieza a vigilar el detector (se llama al crear un escenario de cámara; solo una vez). */
 export function watchPerf() {
   if (timer) return;
   timer = setInterval(() => {
-    if (settings.lightMode !== 'auto' || auto.on) return;
-    auto = autoLightStep(auto, cameraStats, performance.now());
-    if (auto.on) console.info('Modo ligero activado automáticamente', Math.round(cameraStats.detectMs), 'ms', Math.round(cameraStats.detectFps), 'img/s');
+    if (settings.lightMode !== 'auto') return;
+    const was = auto.on;
+    const active = document.visibilityState === 'visible' && document.hasFocus() && !perf.paused;
+    auto = autoLightStep(auto, { ...cameraStats, active }, performance.now());
+    if (auto.on !== was) console.info(auto.on ? 'Modo ligero activado automáticamente' : 'Modo ligero desactivado: el equipo va bien', Math.round(cameraStats.detectMs), 'ms', Math.round(cameraStats.detectFps), 'img/s');
     update();
   }, 1000);
 }

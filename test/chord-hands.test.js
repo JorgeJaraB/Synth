@@ -81,3 +81,51 @@ test('girar la mano derecha sube y baja de octava', async () => {
   play(r, [[600, () => [fakeHand(0.3, ['index']), fakeHand(0.7, ['index'], 0)]]], t);
   assert.equal(r.stable.octave, 0);
 });
+
+test('abrir la mano de golpe (1 → 5) no hace sonar los acordes de paso', async () => {
+  const { ChordHandReader } = await import('../src/core/chord-hands.js');
+  for (const frame of [33, 43]) {
+    const r = new ChordHandReader();
+    const right = () => fakeHand(0.7, ['index']);
+    const seen = [];
+    let t = 0;
+    const step = (fingers, n = 1) => {
+      for (let i = 0; i < n; i++) {
+        r.update([fakeHand(0.3, fingers), right()], stage, 540, (t += frame));
+        seen.push(r.stable?.degree ?? null);
+      }
+    };
+    step(['index'], 20);
+    // Los dedos van saliendo uno a uno, dos imágenes cada uno, y el pulgar al final
+    step(['index', 'middle'], 2);
+    step(['index', 'middle', 'ring'], 2);
+    step(['index', 'middle', 'ring', 'pinky'], 1);
+    step(['thumb', 'index', 'middle', 'ring', 'pinky'], 20);
+    assert.deepEqual([...new Set(seen.filter((x) => x != null))], [1, 5], `a ${frame} ms por imagen`);
+  }
+});
+
+test('la mano "recta" se adapta a la postura de cada uno', async () => {
+  const { ChordHandReader } = await import('../src/core/chord-hands.js');
+  const r = new ChordHandReader();
+  // La mano izquierda descansa algo inclinada hacia fuera (−8°): sigue siendo "recta"
+  let { t } = play(r, [[5000, () => [fakeHand(0.3, ['index'], -8), fakeHand(0.7, ['index'])]]]);
+  assert.equal(r.tilt, 'recta');
+  // Desde ahí, un gesto moderado hacia fuera ya es menor
+  play(r, [[600, () => [fakeHand(0.3, ['index'], -21), fakeHand(0.7, ['index'])]]], t);
+  assert.equal(r.tilt, 'fuera');
+});
+
+test('candado: también se quedan fijas la variante y la octava de la mano derecha', async () => {
+  const { ChordHandReader } = await import('../src/core/chord-hands.js');
+  const { settings } = await import('../src/core/settings.js');
+  settings.chordThumbLock = true;
+  const r = new ChordHandReader();
+  let { t } = play(r, [
+    [500, () => [fakeHand(0.3, ['index']), fakeHand(0.7, ['index'])]],
+    [400, () => [fakeHand(0.3, ['index']), fakeHand(0.7, ['index', 'thumb'])]],
+  ]);
+  ({ t } = play(r, [[600, () => [fakeHand(0.3, ['index', 'middle']), fakeHand(0.7, ['index', 'middle', 'ring', 'thumb'], 35)]]], t));
+  assert.deepEqual([r.stable.degree, r.stable.voicing, r.stable.octave], [1, 'triada', 0]);
+  settings.chordThumbLock = false;
+});

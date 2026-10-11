@@ -28,13 +28,14 @@ export function volumeFromHeight(y01) {
 }
 
 /**
- * Votación por tiempo (no por fotogramas, para que funcione igual en equipos lentos y rápidos):
- * se miran las detecciones del último cuarto de segundo y gana la mayoría (≥ 60 %).
+ * Un gesto nuevo solo se acepta cuando se repite en varias detecciones seguidas. Al abrir o cerrar
+ * la mano los dedos se mueven uno a uno y los gestos intermedios (2, 3, 4 dedos…) duran una o dos
+ * imágenes: antes ganaban por mayoría y sonaban acordes de paso. Con la cámara lenta (pocas
+ * imágenes por segundo) bastan dos seguidas, para no ir con retraso.
  */
-const WINDOW_MS = 150;
-const MAJORITY = 0.6;
-const QUICK = 3; // si las últimas 3 detecciones coinciden, se acepta al momento
-
+const STEADY = 3;
+const STEADY_SLOW = 2;
+const SLOW_FRAME_MS = 50;
 /**
  * Inclinación de la mano medida en píxeles de pantalla: los puntos de MediaPipe van de 0 a 1
  * en ancho y en alto por separado, así que medirla con ellos falsea el ángulo (una
@@ -50,21 +51,25 @@ function screenRoll(hand, stage) {
 
 /** Suavizado exponencial independiente de los fotogramas por segundo (tau en ms). */
 const ease = (dt, tau) => 1 - Math.exp(-Math.max(0, dt) / tau);
+// Postura "recta" de cada uno: se adapta en unos segundos y como mucho hasta 10°.
+const NEUTRAL_TAU = 3000;
+const NEUTRAL_MAX = 10;
 
-function vote(hist, now) {
-  while (hist.length > QUICK && hist[0].t < now - WINDOW_MS) hist.shift();
-  const last = hist.slice(-QUICK);
-  if (last.length === QUICK && last.every((x) => x.v === last[0].v)) return { value: last[0].v, ok: true };
-  const recent = hist.filter((x) => x.t >= now - WINDOW_MS);
-  const [v, n] = mode(recent.map((x) => x.v));
-  return { value: v, ok: recent.length > 0 && n / recent.length >= MAJORITY };
+function vote(hist, frameMs = 33) {
+  const k = frameMs > SLOW_FRAME_MS ? STEADY_SLOW : STEADY;
+  while (hist.length > 8) hist.shift();
+  const last = hist.slice(-k);
+  const ok = last.length === k && last.every((x) => x.v === last[0].v) && last[0].v !== PENDING;
+  return { value: last[0]?.v, ok };
 }
+/** Gesto a medias: el pulgar acaba de salir y todavía no se sabe si es de verdad. */
+const PENDING = 'pendiente';
 
 /**
  * El pulgar engaña mucho al cambiar de acorde: mientras los demás dedos se mueven, la cámara
  * lo ve salir un instante. Solo se cree un cambio del pulgar si dura un rato.
  */
-const THUMB_HOLD_MS = 200;
+const THUMB_HOLD_MS = 150;
 export class SteadyFlag {
   constructor(holdMs = THUMB_HOLD_MS) {
     this.holdMs = holdMs;
@@ -91,7 +96,11 @@ export class SteadyFlag {
 
 export class ChordHandReader {
   constructor() {
-    this.stab = new Stabilizer(60);
+    this.stab = new Stabilizer(30);
+    this.frameMs = 33; // tiempo medio entre detecciones
+    this._lastFresh = null;
+    this._thumbOutSince = null;
+    this.neutral = 0; // inclinación "recta" de esta persona (grados)
     this._lastHands = null;
     this._lastT = null;
     this.degHist = [];
@@ -143,12 +152,24 @@ export class ChordHandReader {
 
     // --- Mano de los acordes: votación del último cuarto de segundo ---
     let rawDeg = -1;
+    if (fresh) {
+      if (this._lastFresh != null) this.frameMs += (Math.min(200, now - this._lastFresh) - this.frameMs) * 0.2;
+      this._lastFresh = now;
+    }
     if (chord) {
-      const thumb = fresh ? this.chordThumb.update(chord.extended.thumb, now) : this.chordThumb.value;
-      rawDeg = degreeFromFingers({ ...chord.extended, thumb });
-    } else this.chordThumb.reset();
+      const ext = chord.extended;
+      if (fresh) {
+        if (ext.thumb && this._thumbOutSince == null) this._thumbOutSince = now;
+        if (!ext.thumb) this._thumbOutSince = null;
+      }
+      rawDeg = degreeFromFingers(ext);
+      // El pulgar que asoma al cambiar de acorde: si cambia el acorde y acaba de salir, se
+      // espera un momento (sin dar por bueno el gesto de "sin pulgar", que tampoco es).
+      const thumbMatters = ext.thumb && degreeFromFingers({ ...ext, thumb: false }) !== rawDeg;
+      if (thumbMatters && now - this._thumbOutSince < THUMB_HOLD_MS) rawDeg = PENDING;
+    } else this._thumbOutSince = null;
     if (fresh) this.degHist.push({ t: now, v: rawDeg });
-    const dv = vote(this.degHist, now);
+    const dv = vote(this.degHist, this.frameMs);
     if (dv.ok) this.degree = dv.value;
     if (!chord) this.degree = -1;
 
@@ -156,8 +177,15 @@ export class ChordHandReader {
     if (chord) {
       const onLeft = chord.landmarks[0].x < 0.5;
       this.roll += (screenRoll(chord, stage) - this.roll) * ease(dt, 60);
-      this.tilt = tiltSide(this.roll, onLeft, this.tilt);
-      chordInfo = { pos: stage.toScreen(chord.landmarks[0]), degree: this.degree, tilt: this.tilt, roll: this.roll, onLeft };
+      // "Recta" es como cada uno pone la mano sin pensar (casi nadie la pone perfectamente
+      // vertical): mientras está recta, el punto de partida se ajusta poco a poco a su postura.
+      if (this.tilt === 'recta' && this.degree >= 1) {
+        this.neutral += (this.roll - this.neutral) * ease(dt, NEUTRAL_TAU);
+        this.neutral = Math.max(-NEUTRAL_MAX, Math.min(NEUTRAL_MAX, this.neutral));
+      }
+      const rel = this.roll - this.neutral;
+      this.tilt = tiltSide(rel, onLeft, this.tilt);
+      chordInfo = { pos: stage.toScreen(chord.landmarks[0]), degree: this.degree, tilt: this.tilt, roll: rel, onLeft };
     } else this.tilt = 'recta';
 
     // --- Mano de expresión: variante, volumen y brillo (suavizados) ---
@@ -169,8 +197,11 @@ export class ChordHandReader {
     if (expr) {
       const vc = voicingFromFingers(expr.extended);
       if (fresh) this.voiceHist.push({ t: now, v: vc == null && expr.fist ? 'mudo' : vc || 'triada' });
-      const vv = vote(this.voiceHist, now);
-      if (vv.ok) this.voicingSmooth = vv.value;
+      const vv = vote(this.voiceHist, this.frameMs);
+      if (vv.ok) {
+        this.voicingSmooth = vv.value;
+        this.exprReady = true; // ya se sabe cuántos dedos enseña (no es el valor por defecto)
+      }
       exprMuted = this.voicingSmooth === 'mudo';
       const pos = stage.toScreen(expr.landmarks[0]);
       targetVol = exprMuted ? 0 : volumeFromHeight(pos.y / hh);
@@ -188,6 +219,7 @@ export class ChordHandReader {
       exprInfo = { pos, voicing: exprMuted ? 'triada' : this.voicingSmooth, muted: exprMuted, roll: this.exprRoll, octave: this.octave };
     } else {
       this.exprThumb.reset();
+      this.exprReady = false;
       this.octave = 0;
       this.voiceHist = [];
       this.voicingSmooth = 'triada';
@@ -205,12 +237,13 @@ export class ChordHandReader {
     const voicing = exprInfo && !exprMuted ? this.voicingSmooth : 'triada';
     const raw = this.degree >= 1 && this.degree <= 7 ? { degree: this.degree, quality: qualityFor(this.degree, this.tilt, settings.chordStraight), voicing, octave: this.octave } : null;
     this.stable = this.stab.update(raw, now);
-    // Candado: con el pulgar de la mano de expresión fuera, el acorde no cambia aunque se mueva
-    // la otra mano (la variante, la octava y el volumen sí siguen a la mano de expresión).
+    // Candado: con el pulgar de la mano de expresión fuera, el acorde queda fijado del todo
+    // (grado, mayor/menor, variante y octava) para preparar el siguiente con las dos manos.
+    // El volumen sigue a la mano.
     if (settings.chordThumbLock && lockThumb && !exprMuted) {
-      if (!this.locked && this.stable) this.locked = { degree: this.stable.degree, quality: this.stable.quality };
+      if (!this.locked && this.stable) this.locked = { ...this.stable };
     } else this.locked = null;
-    if (this.locked) this.stable = { ...this.locked, voicing, octave: this.octave };
+    if (this.locked) this.stable = { ...this.locked };
 
     return {
       chord,
@@ -221,6 +254,7 @@ export class ChordHandReader {
       degree: this.degree,
       tilt: this.tilt,
       octave: this.octave,
+      exprReady: !!this.exprReady,
       locked: !!this.locked,
       voicing: exprInfo ? exprInfo.voicing : null,
       exprMuted,

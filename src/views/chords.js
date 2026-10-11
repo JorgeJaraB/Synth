@@ -123,7 +123,7 @@ export function mount(root) {
     h('button.btn.primary.tut-btn', { onclick: () => startTutorial() }, '🎓 Tutorial paso a paso'),
     settingSelect('Tonalidad', 'chordKey', SOLFEGE.map((s, i) => [i, `${s} mayor (${LETTERS[i]})`]), onChange),
     settingSelect('Sonido', 'chordInstrument', [...INSTRUMENT_OPTIONS(CHORD_WAVES), ...INSTRUMENT_OPTIONS(INSTRUMENTS)], () => rebuildVoice()),
-    settingSelect('Mano izquierda recta', 'chordStraight', [['mayor', 'Mayor (como Gesture Synth)'], ['natural', 'El acorde natural de la escala (ii, iii y vi menores)']], onChange),
+    settingSelect('Mano izquierda recta', 'chordStraight', [['mayor', 'Mayor en todos los acordes'], ['natural', 'El acorde natural de la escala (ii, iii y vi menores)']], onChange),
     settingToggle('Girar la mano derecha cambia de octava', 'chordOctaveTurn', onChange),
     settingToggle('🧪 Prueba: pulgar derecho fuera = fijar el acorde 🔒', 'chordThumbLock', onChange),
     settingToggle('Callar al quitar la mano derecha', 'chordNeedRight'),

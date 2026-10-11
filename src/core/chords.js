@@ -101,8 +101,8 @@ export function handRoll(lm) {
 }
 
 /** Grados de inclinación para pasar a mayor / menor, y para volver a recta (histéresis). */
-export const TILT_ENTER = 12;
-export const TILT_EXIT = 6;
+export const TILT_ENTER = 10;
+export const TILT_EXIT = 5;
 
 /**
  * Hacia dónde está inclinada la mano de los acordes, con histéresis para que no parpadee.
